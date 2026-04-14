@@ -141,11 +141,6 @@ const typeLabel = computed(() => {
         </div>
       </div>
     </section>
-
-    <!-- Footer -->
-    <footer class="app-footer">
-      <p>Forgé dans les abysses ⚔️</p>
-    </footer>
   </div>
 </template>
 

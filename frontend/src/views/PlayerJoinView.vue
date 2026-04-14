@@ -9,6 +9,8 @@ const route = useRoute()
 
 const sessionCode = ref(route.params.code || '')
 const playerName = ref('')
+const hp = ref(20)
+const ac = ref(10)
 const error = ref('')
 const loading = ref(false)
 
@@ -35,11 +37,19 @@ async function joinSession() {
     socket.emit('join-session', {
       code: sessionCode.value,
       playerName: playerName.value,
+      ac: ac.value,
+      hp: hp.value,
     })
 
     socket.once('session-joined', (data) => {
       sessionStore.setActiveSession(data.session)
-      sessionStore.playerInfo = { id: data.playerId, name: playerName.value }
+      sessionStore.playerInfo = {
+        id: data.player.id,
+        name: data.player.player_name,
+        ac: data.player.ac,
+        hp: data.player.current_hp,
+        maxHp: data.player.max_hp,
+      }
       router.push('/player')
     })
 
@@ -47,7 +57,6 @@ async function joinSession() {
       error.value = err.message || 'Erreur lors de la connexion.'
       loading.value = false
     })
-
   } catch {
     error.value = 'Erreur de connexion au serveur.'
     loading.value = false
@@ -65,35 +74,41 @@ async function joinSession() {
 
     <main class="join-main">
       <form class="join-form" @submit.prevent="joinSession">
+
         <div class="form-group">
           <label class="form-label">Code de session</label>
-          <input
-            v-model="sessionCode"
-            type="text"
-            class="form-input"
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          />
-          <p class="form-hint">Entrez le code fourni par votre MJ ou scannez le QR Code.</p>
+          <input v-model="sessionCode" type="text" class="form-input"
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+          <p class="form-hint">Fourni par votre MJ ou via le QR Code.</p>
         </div>
+
         <div class="form-group">
-          <label class="form-label">Votre nom de personnage</label>
-          <input
-            v-model="playerName"
-            type="text"
-            class="form-input"
-            placeholder="Gandalf le Gris"
-          />
+          <label class="form-label">Nom du personnage</label>
+          <input v-model="playerName" type="text" class="form-input" placeholder="Gandalf le Gris" />
         </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">
+              <span class="stat-icon">❤️</span> Points de Vie (HP)
+            </label>
+            <input v-model.number="hp" type="number" min="1" max="999" class="form-input stat-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              <span class="stat-icon">🛡️</span> Classe d'Armure (CA)
+            </label>
+            <input v-model.number="ac" type="number" min="1" max="30" class="form-input stat-input" />
+          </div>
+        </div>
+
         <p v-if="error" class="form-error">{{ error }}</p>
+
         <button type="submit" class="submit-btn" :disabled="loading">
-          {{ loading ? 'Connexion...' : 'Rejoindre la session' }}
+          {{ loading ? 'Connexion...' : '⚔️ Rejoindre la session' }}
         </button>
       </form>
     </main>
-
-    <footer class="app-footer">
-      <p>Forgé dans les abysses ⚔️</p>
-    </footer>
   </div>
 </template>
 
@@ -102,6 +117,8 @@ async function joinSession() {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
 }
 
 .join-header {
@@ -121,7 +138,6 @@ async function joinSession() {
   font-size: 0.8rem;
   cursor: pointer;
 }
-
 .back-btn:hover { color: var(--color-gold); }
 
 .skull-ornament { font-size: 2rem; }
@@ -132,7 +148,6 @@ async function joinSession() {
   color: var(--color-parchment);
   margin-top: 0.5rem;
 }
-
 .title-accent { color: var(--color-gold-bright); }
 
 .join-main {
@@ -151,6 +166,12 @@ async function joinSession() {
   gap: 1.25rem;
 }
 
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -163,7 +184,11 @@ async function joinSession() {
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
+.stat-icon { font-size: 0.9rem; }
 
 .form-input {
   background: #1e1508;
@@ -176,7 +201,7 @@ async function joinSession() {
   outline: none;
   transition: border-color 0.2s;
 }
-
+.stat-input { text-align: center; font-size: 1.3rem; font-weight: 700; padding: 0.75rem 0.5rem; }
 .form-input:focus { border-color: var(--color-gold-dark); }
 .form-input::placeholder { color: var(--color-border); }
 
@@ -184,7 +209,6 @@ async function joinSession() {
   font-family: var(--font-body);
   font-size: 0.8rem;
   color: var(--color-text-dim);
-  font-style: italic;
 }
 
 .form-error {
@@ -208,21 +232,9 @@ async function joinSession() {
   transition: all 0.2s;
   margin-top: 0.5rem;
 }
-
 .submit-btn:hover:not(:disabled) {
   background: linear-gradient(160deg, #2a6a3a, #1a4a2a);
   box-shadow: 0 4px 20px rgba(42,106,58,0.4);
 }
-
 .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.app-footer {
-  padding: 1.5rem;
-  text-align: center;
-  font-family: var(--font-heading);
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--color-border);
-}
 </style>

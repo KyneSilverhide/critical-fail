@@ -76,10 +76,6 @@ async function login() {
         </button>
       </form>
     </main>
-
-    <footer class="app-footer">
-      <p>Forgé dans les abysses ⚔️</p>
-    </footer>
   </div>
 </template>
 

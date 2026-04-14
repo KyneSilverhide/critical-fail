@@ -4,6 +4,7 @@ import LoginView from '../views/LoginView.vue'
 import AdminView from '../views/AdminView.vue'
 import PlayerJoinView from '../views/PlayerJoinView.vue'
 import PlayerInboxView from '../views/PlayerInboxView.vue'
+import TvView from '../views/TvView.vue'
 import { authStore } from '../stores/auth.js'
 
 const routes = [
@@ -16,6 +17,7 @@ const routes = [
   },
   { path: '/join/:code?', component: PlayerJoinView },
   { path: '/player', component: PlayerInboxView },
+  { path: '/tv/:code', component: TvView },
 ]
 
 const router = createRouter({

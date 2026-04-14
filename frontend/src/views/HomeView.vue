@@ -7,9 +7,9 @@ const router = useRouter()
 <template>
   <div class="home-wrapper">
     <header class="home-header">
-      <div class="skull-ornament">💀</div>
-      <h1 class="app-title">Échec<br /><span class="title-accent">Critique</span></h1>
-      <p class="app-subtitle">Table des désastres héroïques</p>
+      <div class="skull-ornament">🧰</div>
+      <h1 class="app-title">DM <span class="title-accent">Toolkit</span></h1>
+      <p class="app-subtitle">Outils de maîtrise et de table</p>
     </header>
 
     <main class="home-main">
@@ -27,10 +27,6 @@ const router = useRouter()
         </button>
       </div>
     </main>
-
-    <footer class="app-footer">
-      <p>Forgé dans les abysses ⚔️</p>
-    </footer>
   </div>
 </template>
 

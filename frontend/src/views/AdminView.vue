@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { authStore } from '../stores/auth.js'
 import { sessionStore } from '../stores/session.js'
@@ -15,7 +15,7 @@ const activeTab = ref('sessions')
 const tabs = [
   { key: 'sessions', label: 'Sessions', icon: '📋' },
   { key: 'message', label: 'Message', icon: '✉️' },
-  { key: 'dice', label: 'Échec Critique', icon: '🎲' },
+  { key: 'dice', label: 'Critical Fail', icon: '🎲' },
 ]
 
 function logout() {
@@ -34,12 +34,33 @@ onMounted(() => {
   socket.on('player-left', (data) => {
     sessionStore.removePlayer(data.playerId)
   })
+
+  socket.on('players-snapshot', ({ sessionId, players }) => {
+    if (sessionStore.activeSession?.id !== sessionId) return
+    sessionStore.setPlayers(players)
+  })
+
+  socket.on('hp-updated', ({ playerId, newHp }) => {
+    sessionStore.updatePlayerHp(playerId, newHp)
+  })
 })
+
+watch(
+  () => sessionStore.activeSession?.id,
+  (sessionId) => {
+    if (!sessionId) return
+    const socket = getSocket(authStore.token)
+    socket.emit('admin-join', sessionId)
+  },
+  { immediate: true }
+)
 
 onUnmounted(() => {
   const socket = getSocket()
   socket.off('player-joined')
   socket.off('player-left')
+  socket.off('players-snapshot')
+  socket.off('hp-updated')
 })
 </script>
 
@@ -78,10 +99,6 @@ onUnmounted(() => {
         <CriticalFailTool />
       </div>
     </main>
-
-    <footer class="app-footer">
-      <p>Forgé dans les abysses ⚔️</p>
-    </footer>
   </div>
 </template>
 
@@ -90,6 +107,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .admin-header {

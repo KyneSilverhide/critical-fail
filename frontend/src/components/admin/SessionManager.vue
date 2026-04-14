@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { authStore } from '../../stores/auth.js'
 import { sessionStore } from '../../stores/session.js'
 
@@ -10,6 +10,27 @@ const loading = ref(false)
 const error = ref('')
 const qrCodeUrl = ref(null)
 const joinUrl = ref('')
+const tvUrl = ref('')
+const tvCopied = ref(false)
+
+async function loadSessionQrCode(sessionId) {
+  const cached = sessionStore.getQrCode(sessionId)
+  if (cached) {
+    qrCodeUrl.value = cached
+    return
+  }
+
+  const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/qrcode`, {
+    headers: { Authorization: `Bearer ${authStore.token}` },
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    throw new Error(data.error || 'Erreur lors du chargement du QR code.')
+  }
+
+  qrCodeUrl.value = data.qrCodeDataUrl
+  sessionStore.setQrCode(sessionId, data.qrCodeDataUrl)
+}
 
 async function createSession() {
   if (!sessionName.value.trim()) {
@@ -34,7 +55,9 @@ async function createSession() {
     }
     sessionStore.setActiveSession(data.session)
     qrCodeUrl.value = data.qrCodeDataUrl
+    sessionStore.setQrCode(data.session.id, data.qrCodeDataUrl)
     joinUrl.value = `${window.location.origin}/join/${data.session.code}`
+    tvUrl.value = `${window.location.origin}/tv/${data.session.code}`
     sessionName.value = ''
     await loadSessions()
   } catch {
@@ -70,9 +93,34 @@ async function closeSession(id) {
 
 function selectSession(session) {
   sessionStore.setActiveSession(session)
-  qrCodeUrl.value = null
   joinUrl.value = `${window.location.origin}/join/${session.code}`
+  tvUrl.value = `${window.location.origin}/tv/${session.code}`
 }
+
+async function copyTvUrl() {
+  try {
+    await navigator.clipboard.writeText(tvUrl.value)
+    tvCopied.value = true
+    setTimeout(() => { tvCopied.value = false }, 2000)
+  } catch {}
+}
+
+watch(
+  () => sessionStore.activeSession,
+  (session) => {
+    if (!session) {
+      qrCodeUrl.value = null
+      joinUrl.value = ''
+      return
+    }
+    joinUrl.value = `${window.location.origin}/join/${session.code}`
+    tvUrl.value = `${window.location.origin}/tv/${session.code}`
+    loadSessionQrCode(session.id).catch(() => {
+      qrCodeUrl.value = null
+    })
+  },
+  { immediate: true }
+)
 
 onMounted(loadSessions)
 </script>
@@ -108,6 +156,22 @@ onMounted(loadSessions)
           <img :src="qrCodeUrl" alt="QR Code" class="qr-code" />
           <p class="qr-hint">Scannez pour rejoindre</p>
         </div>
+
+        <!-- TV Screen link -->
+        <div class="tv-section">
+          <div class="tv-header">
+            <span class="tv-label">📺 Écran TV</span>
+            <a :href="tvUrl" target="_blank" class="tv-open-btn">Ouvrir →</a>
+          </div>
+          <div class="tv-url-row">
+            <span class="tv-url">{{ tvUrl }}</span>
+            <button class="tv-copy-btn" @click="copyTvUrl">
+              {{ tvCopied ? '✓ Copié' : '📋 Copier' }}
+            </button>
+          </div>
+          <p class="tv-hint">Ouvrez ce lien sur votre TV ou second écran.</p>
+        </div>
+
         <button class="close-btn" @click="closeSession(sessionStore.activeSession.id)">
           Fermer la session
         </button>
@@ -314,5 +378,77 @@ onMounted(loadSessions)
 
 .close-btn:hover {
   background: rgba(139,42,42,0.15);
+}
+
+.tv-section {
+  margin-top: 0.75rem;
+  background: linear-gradient(160deg, #0e1a2a, #091220);
+  border: 1px solid rgba(137,196,255,0.25);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tv-label {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #89c4ff;
+}
+
+.tv-open-btn {
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  color: #89c4ff;
+  text-decoration: none;
+  border: 1px solid rgba(137,196,255,0.3);
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  transition: all 0.2s;
+}
+.tv-open-btn:hover { background: rgba(137,196,255,0.1); }
+
+.tv-url-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tv-url {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: rgba(137,196,255,0.7);
+  word-break: break-all;
+}
+
+.tv-copy-btn {
+  padding: 0.2rem 0.55rem;
+  background: rgba(137,196,255,0.08);
+  border: 1px solid rgba(137,196,255,0.25);
+  border-radius: 6px;
+  color: #89c4ff;
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.tv-copy-btn:hover { background: rgba(137,196,255,0.15); }
+
+.tv-hint {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  color: var(--color-text-dim);
 }
 </style>

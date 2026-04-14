@@ -40,6 +40,27 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 })
 
+router.get('/:id/qrcode', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, code, status FROM sessions WHERE id = $1 AND created_by = $2',
+      [req.params.id, req.admin.id]
+    )
+    const session = result.rows[0]
+    if (!session) return res.status(404).json({ error: 'Session not found.' })
+    if (session.status !== 'active') return res.status(400).json({ error: 'Session is closed.' })
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+    const joinUrl = `${frontendUrl}/join/${session.code}`
+    const qrCodeDataUrl = await QRCode.toDataURL(joinUrl)
+
+    res.json({ qrCodeDataUrl, joinUrl })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error.' })
+  }
+})
+
 router.get('/:code', async (req, res) => {
   try {
     const result = await pool.query(

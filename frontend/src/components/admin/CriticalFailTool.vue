@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { sessionStore } from '../../stores/session.js'
 import { authStore } from '../../stores/auth.js'
 import { getSocket } from '../../socket.js'
@@ -14,6 +14,8 @@ const result = ref(null)
 const animatedDice = ref(null)
 const showResult = ref(false)
 const sendFeedback = ref('')
+const selectedPlayerId = ref('all')
+const hasConnectedPlayers = computed(() => sessionStore.players.length > 0)
 
 const tables = {
   melee: meleeTable,
@@ -77,6 +79,11 @@ function sendToPlayers() {
     setTimeout(() => { sendFeedback.value = '' }, 3000)
     return
   }
+  if (!hasConnectedPlayers.value) {
+    sendFeedback.value = 'Aucun joueur connecté.'
+    setTimeout(() => { sendFeedback.value = '' }, 3000)
+    return
+  }
 
   const socket = getSocket(authStore.token)
   socket.emit('send-dice-result', {
@@ -84,15 +91,33 @@ function sendToPlayers() {
     combatType: combatType.value,
     rollValue: diceValue.value,
     resultText: result.value,
-    toPlayerId: null,
+    toPlayerId: selectedPlayerId.value === 'all' ? null : parseInt(selectedPlayerId.value),
   })
 
-  sendFeedback.value = 'Résultat envoyé aux joueurs !'
+  const target = selectedPlayerId.value === 'all'
+    ? 'tous les joueurs'
+    : sessionStore.players.find(p => p.id === parseInt(selectedPlayerId.value))?.player_name || 'joueur'
+  sendFeedback.value = `Résultat envoyé à ${target} !`
   setTimeout(() => { sendFeedback.value = '' }, 3000)
 }
 
 const typeLabel = computed(() => {
   return combatTypes.find(t => t.key === combatType.value)?.label || ''
+})
+
+function handleSendError(data) {
+  sendFeedback.value = data?.message || "Erreur lors de l'envoi."
+  setTimeout(() => { sendFeedback.value = '' }, 3000)
+}
+
+onMounted(() => {
+  const socket = getSocket(authStore.token)
+  socket.on('send-error', handleSendError)
+})
+
+onUnmounted(() => {
+  const socket = getSocket()
+  socket.off('send-error', handleSendError)
 })
 </script>
 
@@ -148,12 +173,24 @@ const typeLabel = computed(() => {
       </div>
 
       <div v-if="showResult" class="send-section">
-        <button class="send-btn" @click="sendToPlayers" :disabled="!sessionStore.activeSession">
-          📡 Envoyer aux Joueurs
-        </button>
+        <div class="recipient-row">
+          <select v-model="selectedPlayerId" class="recipient-select" :disabled="!hasConnectedPlayers">
+            <option v-if="hasConnectedPlayers" value="all">📣 Tous les joueurs</option>
+            <option v-else value="" disabled>Aucun joueur connecté</option>
+            <option v-for="p in sessionStore.players" :key="p.id" :value="p.id">
+              ⚔️ {{ p.player_name }}
+            </option>
+          </select>
+          <button class="send-btn" @click="sendToPlayers" :disabled="!sessionStore.activeSession || !hasConnectedPlayers">
+            📡 Envoyer
+          </button>
+        </div>
         <p v-if="sendFeedback" class="send-feedback">{{ sendFeedback }}</p>
         <p v-if="!sessionStore.activeSession" class="no-session-hint">
           Aucune session active — créez une session dans l'onglet Sessions.
+        </p>
+        <p v-else-if="!hasConnectedPlayers" class="no-session-hint">
+          Aucun joueur connecté dans cette session.
         </p>
       </div>
     </section>
@@ -437,6 +474,28 @@ const typeLabel = computed(() => {
   gap: 0.5rem;
 }
 
+.recipient-row {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  align-items: center;
+}
+
+.recipient-select {
+  flex: 1;
+  background: #1e1508;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  color: var(--color-parchment);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+}
+.recipient-select:focus { border-color: var(--color-gold-dark); }
+.recipient-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .send-btn {
   padding: 0.75rem 2rem;
   background: linear-gradient(160deg, #1a4a2a, #0e2e1a);
@@ -472,7 +531,6 @@ const typeLabel = computed(() => {
   font-family: var(--font-body);
   font-size: 0.8rem;
   color: var(--color-text-dim);
-  font-style: italic;
   text-align: center;
 }
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { sessionStore } from '../../stores/session.js'
 import { authStore } from '../../stores/auth.js'
 import { getSocket } from '../../socket.js'
@@ -14,6 +14,32 @@ const sending = ref(false)
 const feedback = ref('')
 
 const hasSession = computed(() => !!sessionStore.activeSession)
+const hasConnectedPlayers = computed(() => sessionStore.players.length > 0)
+const canSend = computed(() => hasSession.value && hasConnectedPlayers.value && !sending.value)
+
+function handleSendError(data) {
+  feedback.value = data?.message || "Erreur lors de l'envoi."
+}
+
+watch(hasConnectedPlayers, (isConnected) => {
+  if (!isConnected) {
+    selectedPlayerId.value = ''
+    return
+  }
+  if (!selectedPlayerId.value) {
+    selectedPlayerId.value = 'all'
+  }
+}, { immediate: true })
+
+onMounted(() => {
+  const socket = getSocket(authStore.token)
+  socket.on('send-error', handleSendError)
+})
+
+onUnmounted(() => {
+  const socket = getSocket()
+  socket.off('send-error', handleSendError)
+})
 
 function onFileChange(e) {
   imageFile.value = e.target.files[0] || null
@@ -22,6 +48,10 @@ function onFileChange(e) {
 async function sendMessage() {
   if (!hasSession.value) {
     feedback.value = 'Aucune session active.'
+    return
+  }
+  if (!hasConnectedPlayers.value) {
+    feedback.value = 'Aucun joueur connecté.'
     return
   }
   if (messageType.value === 'text' && !messageText.value.trim()) {
@@ -77,8 +107,9 @@ async function sendMessage() {
     <template v-else>
       <div class="form-group">
         <label class="form-label">Destinataire</label>
-        <select v-model="selectedPlayerId" class="form-select">
-          <option value="all">Tous les joueurs</option>
+        <select v-model="selectedPlayerId" class="form-select" :disabled="!hasConnectedPlayers">
+          <option v-if="hasConnectedPlayers" value="all">Tous les joueurs</option>
+          <option v-else value="" disabled>Aucun joueur connecté</option>
           <option v-for="p in sessionStore.players" :key="p.id" :value="p.id">
             {{ p.player_name }}
           </option>
@@ -120,9 +151,10 @@ async function sendMessage() {
         {{ feedback }}
       </p>
 
-      <button class="send-btn" @click="sendMessage" :disabled="sending">
+      <button class="send-btn" @click="sendMessage" :disabled="!canSend">
         {{ sending ? 'Envoi…' : '✉️ Envoyer' }}
       </button>
+      <p v-if="!hasConnectedPlayers" class="feedback error">Aucun joueur connecté dans cette session.</p>
     </template>
   </div>
 </template>
@@ -144,7 +176,6 @@ async function sendMessage() {
 
 .no-session {
   font-family: var(--font-body);
-  font-style: italic;
   color: var(--color-text-dim);
   text-align: center;
   padding: 2rem 0;

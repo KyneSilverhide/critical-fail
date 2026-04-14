@@ -131,7 +131,6 @@ function formatTime(dateStr) {
   font-size: 0.95rem;
   color: var(--color-parchment);
   line-height: 1.5;
-  font-style: italic;
 }
 
 .card-header {
