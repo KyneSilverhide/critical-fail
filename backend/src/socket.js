@@ -15,6 +15,19 @@ function setupSocket(io) {
     next()
   })
 
+  async function removePlayer(socket) {
+    if (!socket.playerId || !socket.sessionId) return
+    try {
+      await pool.query('DELETE FROM players WHERE id = $1', [socket.playerId])
+      socket.leave(`session:${socket.sessionId}`)
+      io.to(`admin:${socket.sessionId}`).emit('player-left', { playerId: socket.playerId })
+      socket.playerId = null
+      socket.sessionId = null
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   io.on('connection', (socket) => {
     console.log('Socket connected:', socket.id)
 
@@ -53,16 +66,7 @@ function setupSocket(io) {
     })
 
     socket.on('leave-session', async () => {
-      if (!socket.playerId || !socket.sessionId) return
-      try {
-        await pool.query('DELETE FROM players WHERE id = $1', [socket.playerId])
-        socket.leave(`session:${socket.sessionId}`)
-        io.to(`admin:${socket.sessionId}`).emit('player-left', { playerId: socket.playerId })
-        socket.playerId = null
-        socket.sessionId = null
-      } catch (err) {
-        console.error(err)
-      }
+      await removePlayer(socket)
     })
 
     socket.on('admin-join', (sessionId) => {
@@ -131,14 +135,7 @@ function setupSocket(io) {
     })
 
     socket.on('disconnect', async () => {
-      if (socket.playerId && socket.sessionId) {
-        try {
-          await pool.query('DELETE FROM players WHERE id = $1', [socket.playerId])
-          io.to(`admin:${socket.sessionId}`).emit('player-left', { playerId: socket.playerId })
-        } catch (err) {
-          console.error(err)
-        }
-      }
+      await removePlayer(socket)
     })
   })
 }

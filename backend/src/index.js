@@ -5,6 +5,7 @@ const { Server } = require('socket.io')
 const cors = require('cors')
 const path = require('path')
 const bcrypt = require('bcrypt')
+const { rateLimit } = require('express-rate-limit')
 const runMigrations = require('./migrations')
 const pool = require('./db')
 const authRoutes = require('./routes/auth')
@@ -29,9 +30,21 @@ app.use(cors({ origin: FRONTEND_URL, credentials: true }))
 app.use(express.json())
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
 
-app.use('/api/auth', authRoutes)
-app.use('/api/sessions', sessionRoutes)
-app.use('/api/uploads', uploadRoutes)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many requests, please try again later.' },
+})
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  message: { error: 'Too many requests, please try again later.' },
+})
+
+app.use('/api/auth', authLimiter, authRoutes)
+app.use('/api/sessions', apiLimiter, sessionRoutes)
+app.use('/api/uploads', apiLimiter, uploadRoutes)
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }))
 
