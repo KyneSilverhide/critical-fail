@@ -10,8 +10,10 @@ const session = ref(null)
 const players = ref([])
 const connectionError = ref('')
 
-// Track which players had their HP recently updated (for animation)
-const hpAnimating = ref(new Set())
+// Track HP change animations per player: { id -> { type: 'damage'|'heal', delta: number, key: number } }
+const hpAnimations = ref({})
+// Track previous HP values to compute delta
+const previousHp = ref({})
 
 function hpPercent(player) {
   if (!player.max_hp) return 100
@@ -38,6 +40,12 @@ function statusColor(player) {
   return '#2fb896'
 }
 
+function avatarUrl(player) {
+  if (!player.avatar_url) return null
+  if (player.avatar_url.startsWith('http')) return player.avatar_url
+  return `${BACKEND_URL}${player.avatar_url}`
+}
+
 let socket = null
 
 onMounted(() => {
@@ -50,28 +58,45 @@ onMounted(() => {
   socket.on('tv-snapshot', ({ session: s, players: p }) => {
     session.value = s
     players.value = p
+    // Initialise previousHp tracking
+    p.forEach(pl => { previousHp.value[pl.id] = pl.current_hp })
   })
 
   socket.on('player-joined', (player) => {
     const idx = players.value.findIndex(p => String(p.id) === String(player.id))
-    if (idx === -1) players.value.push(player)
-    else players.value[idx] = { ...players.value[idx], ...player }
+    if (idx === -1) {
+      players.value.push(player)
+    } else {
+      players.value[idx] = { ...players.value[idx], ...player }
+    }
+    previousHp.value[player.id] = player.current_hp
   })
 
   socket.on('player-left', ({ playerId }) => {
     players.value = players.value.filter(p => String(p.id) !== String(playerId))
+    delete previousHp.value[playerId]
+    delete hpAnimations.value[playerId]
   })
 
   socket.on('hp-updated', ({ playerId, newHp }) => {
     const idx = players.value.findIndex(p => String(p.id) === String(playerId))
     if (idx !== -1) {
+      const oldHp = previousHp.value[players.value[idx].id] ?? players.value[idx].current_hp
+      const delta = newHp - oldHp
       players.value[idx] = { ...players.value[idx], current_hp: newHp }
-      // Trigger animation
+      previousHp.value[players.value[idx].id] = newHp
+
       const id = players.value[idx].id
-      hpAnimating.value = new Set([...hpAnimating.value, id])
+      // Trigger animation (use a key to force re-trigger if updated quickly)
+      hpAnimations.value = {
+        ...hpAnimations.value,
+        [id]: { type: delta < 0 ? 'damage' : 'heal', delta, key: Date.now() },
+      }
       setTimeout(() => {
-        hpAnimating.value = new Set([...hpAnimating.value].filter(x => x !== id))
-      }, 1500)
+        const current = { ...hpAnimations.value }
+        delete current[id]
+        hpAnimations.value = current
+      }, 2000)
     }
   })
 
@@ -118,15 +143,25 @@ onUnmounted(() => {
           :key="player.id"
           class="player-card"
           :class="{
-            'is-animating': hpAnimating.has(player.id),
+            'is-damage': hpAnimations[player.id]?.type === 'damage',
+            'is-heal': hpAnimations[player.id]?.type === 'heal',
             'is-critical': hpPercent(player) <= 20 && hpPercent(player) > 0,
             'is-ko': hpPercent(player) <= 0,
           }"
         >
           <!-- Header -->
           <div class="card-header">
-            <span class="card-sword">⚔️</span>
-            <span class="card-name">{{ player.player_name }}</span>
+            <!-- Avatar -->
+            <div class="card-avatar">
+              <img v-if="avatarUrl(player)" :src="avatarUrl(player)" :alt="player.player_name" class="avatar-img" />
+              <span v-else class="avatar-fallback">{{ player.player_name?.[0]?.toUpperCase() || '?' }}</span>
+            </div>
+
+            <div class="card-identity">
+              <span class="card-name">{{ player.player_name }}</span>
+              <span v-if="player.dnd_class" class="class-badge">{{ player.dnd_class }}</span>
+            </div>
+
             <div class="ac-shield">
               <span class="ac-icon">🛡️</span>
               <span class="ac-value">{{ player.ac ?? 10 }}</span>
@@ -158,8 +193,17 @@ onUnmounted(() => {
             </span>
           </div>
 
-          <!-- Animate overlay on HP change -->
-          <div v-if="hpAnimating.has(player.id)" class="hp-pulse-overlay" />
+          <!-- HP change floating indicator -->
+          <Transition name="hp-float">
+            <div
+              v-if="hpAnimations[player.id]"
+              :key="hpAnimations[player.id].key"
+              class="hp-delta"
+              :class="hpAnimations[player.id].type === 'damage' ? 'hp-delta-damage' : 'hp-delta-heal'"
+            >
+              {{ hpAnimations[player.id].delta > 0 ? '+' : '' }}{{ hpAnimations[player.id].delta }}
+            </div>
+          </Transition>
         </div>
       </main>
 
@@ -282,28 +326,35 @@ onUnmounted(() => {
   opacity: 0.6;
   filter: grayscale(0.5);
 }
-.player-card.is-animating {
-  animation: hpFlash 1.5s ease-out;
-}
 
-@keyframes hpFlash {
-  0%   { box-shadow: 0 0 0px rgba(240,192,64,0); border-color: var(--color-gold-bright); }
-  20%  { box-shadow: 0 0 40px rgba(240,192,64,0.6); }
-  60%  { box-shadow: 0 0 20px rgba(240,192,64,0.3); }
+/* Damage animation: red shake */
+.player-card.is-damage {
+  animation: damageShake 0.5s ease-out, damageGlow 2s ease-out;
+}
+@keyframes damageShake {
+  0%   { transform: translateX(0); }
+  15%  { transform: translateX(-8px); }
+  30%  { transform: translateX(7px); }
+  45%  { transform: translateX(-5px); }
+  60%  { transform: translateX(4px); }
+  75%  { transform: translateX(-2px); }
+  100% { transform: translateX(0); }
+}
+@keyframes damageGlow {
+  0%   { box-shadow: 0 0 30px rgba(224,48,48,0.8); border-color: #e03030; }
+  40%  { box-shadow: 0 0 20px rgba(224,48,48,0.4); }
   100% { box-shadow: none; border-color: var(--color-border); }
 }
 
-.hp-pulse-overlay {
-  position: absolute;
-  inset: 0;
-  border-radius: 16px;
-  background: radial-gradient(ellipse at center, rgba(240,192,64,0.12) 0%, transparent 70%);
-  pointer-events: none;
-  animation: pulseOut 1.5s ease-out forwards;
+/* Heal animation: green pulse */
+.player-card.is-heal {
+  animation: healPulse 2s ease-out;
 }
-@keyframes pulseOut {
-  0% { opacity: 1; }
-  100% { opacity: 0; }
+@keyframes healPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(47,184,150,0.7); border-color: #2fb896; }
+  20%  { box-shadow: 0 0 30px 6px rgba(47,184,150,0.5); }
+  60%  { box-shadow: 0 0 15px 2px rgba(47,184,150,0.2); }
+  100% { box-shadow: none; border-color: var(--color-border); }
 }
 
 /* Card Header */
@@ -312,17 +363,62 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.75rem;
 }
-.card-sword { font-size: 1.2rem; }
-.card-name {
-  flex: 1;
+
+/* Avatar */
+.card-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--color-gold-dark);
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar-fallback {
   font-family: var(--font-heading);
-  font-size: clamp(1rem, 2vw, 1.4rem);
+  font-size: 1.3rem;
+  color: var(--color-gold-dark);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.card-identity {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.card-name {
+  font-family: var(--font-heading);
+  font-size: clamp(0.9rem, 2vw, 1.3rem);
   color: var(--color-parchment);
   letter-spacing: 0.05em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.class-badge {
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-gold-dark);
+  background: rgba(180,120,20,0.15);
+  border: 1px solid rgba(180,120,20,0.4);
+  border-radius: 20px;
+  padding: 0.1rem 0.45rem;
+  width: fit-content;
+}
+
 .ac-shield {
   display: flex;
   align-items: center;
@@ -387,6 +483,42 @@ onUnmounted(() => {
   background: rgba(0,0,0,0.2);
 }
 
+/* HP floating delta */
+.hp-delta {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-title);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 900;
+  pointer-events: none;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+  z-index: 10;
+}
+.hp-delta-damage {
+  color: #ff4444;
+  text-shadow: 0 0 20px rgba(255,68,68,0.8), 0 2px 8px rgba(0,0,0,0.9);
+}
+.hp-delta-heal {
+  color: #2fb896;
+  text-shadow: 0 0 20px rgba(47,184,150,0.8), 0 2px 8px rgba(0,0,0,0.9);
+}
+
+/* Transition for HP delta float-up */
+.hp-float-enter-active {
+  animation: floatUp 2s ease-out forwards;
+}
+.hp-float-leave-active {
+  display: none;
+}
+@keyframes floatUp {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1.4); }
+  20%  { opacity: 1; transform: translate(-50%, -70%) scale(1.1); }
+  70%  { opacity: 0.8; transform: translate(-50%, -100%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -130%) scale(0.9); }
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────── */
 .tv-footer {
   text-align: center;
@@ -401,4 +533,3 @@ onUnmounted(() => {
   opacity: 0.5;
 }
 </style>
-

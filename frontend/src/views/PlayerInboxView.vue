@@ -9,6 +9,7 @@ const router = useRouter()
 const messages = ref([])
 const playerInfo = ref(sessionStore.playerInfo || { name: 'Aventurier', hp: 20, maxHp: 20, ac: 10 })
 const sessionName = ref(sessionStore.activeSession?.name || 'Session')
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 // HP tracking
 const currentHp = ref(playerInfo.value?.hp ?? 20)
@@ -78,9 +79,18 @@ onUnmounted(() => {
     <header class="inbox-header">
       <div class="header-top">
         <div class="player-info">
-          <span class="player-icon">⚔️</span>
+          <div class="player-avatar-wrap">
+            <img
+              v-if="playerInfo?.avatarUrl"
+              :src="playerInfo.avatarUrl.startsWith('/uploads/') ? BACKEND_URL + playerInfo.avatarUrl : playerInfo.avatarUrl"
+              :alt="playerInfo?.name"
+              class="player-avatar"
+            />
+            <span v-else class="player-icon">⚔️</span>
+          </div>
           <div>
             <p class="player-name">{{ playerInfo?.name || 'Aventurier' }}</p>
+            <p v-if="playerInfo?.dndClass" class="player-class">{{ playerInfo.dndClass }}</p>
             <p class="session-name">{{ sessionName }}</p>
           </div>
         </div>
@@ -149,7 +159,33 @@ onUnmounted(() => {
 
 .player-info { display: flex; align-items: center; gap: 0.75rem; }
 .player-icon { font-size: 1.5rem; }
+.player-avatar-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--color-gold-dark);
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.player-avatar { width: 100%; height: 100%; object-fit: cover; }
 .player-name { font-family: var(--font-heading); font-size: 1rem; color: var(--color-parchment); letter-spacing: 0.05em; }
+.player-class {
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-gold-dark);
+  background: rgba(180,120,20,0.15);
+  border: 1px solid rgba(180,120,20,0.4);
+  border-radius: 20px;
+  padding: 0.1rem 0.45rem;
+  display: inline-block;
+  margin: 0.1rem 0;
+}
 .session-name { font-family: var(--font-heading); font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--color-text-dim); }
 
 .leave-btn {

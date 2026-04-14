@@ -29,7 +29,7 @@ function setupSocket(io) {
     console.log('Socket connected:', socket.id)
 
     // ── Player: join ────────────────────────────────────────────────────────
-    socket.on('join-session', async ({ code, playerName, ac, hp }) => {
+    socket.on('join-session', async ({ code, playerName, ac, hp, dndClass, avatarUrl }) => {
       try {
         const sessionResult = await pool.query(
           "SELECT * FROM sessions WHERE code = $1 AND status = 'active'", [code])
@@ -38,11 +38,13 @@ function setupSocket(io) {
 
         const acVal = Math.max(1, parseInt(ac) || 10)
         const hpVal = Math.max(1, parseInt(hp) || 20)
+        const classVal = dndClass || null
+        const avatarVal = avatarUrl || null
 
         const playerResult = await pool.query(
-          `INSERT INTO players (session_id, player_name, socket_id, ac, max_hp, current_hp)
-           VALUES ($1, $2, $3, $4, $5, $5) RETURNING *`,
-          [session.id, playerName, socket.id, acVal, hpVal]
+          `INSERT INTO players (session_id, player_name, socket_id, ac, max_hp, current_hp, dnd_class, avatar_url)
+           VALUES ($1, $2, $3, $4, $5, $5, $6, $7) RETURNING *`,
+          [session.id, playerName, socket.id, acVal, hpVal, classVal, avatarVal]
         )
         const player = playerResult.rows[0]
         socket.join(`session:${session.id}`)
@@ -51,7 +53,7 @@ function setupSocket(io) {
 
         socket.emit('session-joined', {
           session: { id: session.id, name: session.name, code: session.code },
-          player: { id: player.id, player_name: player.player_name, ac: player.ac, max_hp: player.max_hp, current_hp: player.current_hp },
+          player: { id: player.id, player_name: player.player_name, ac: player.ac, max_hp: player.max_hp, current_hp: player.current_hp, dnd_class: player.dnd_class, avatar_url: player.avatar_url },
         })
         io.to(`admin:${session.id}`).emit('player-joined', player)
         io.to(`tv:${session.id}`).emit('player-joined', player)
@@ -98,7 +100,7 @@ function setupSocket(io) {
         socket.join(`tv:${session.id}`)
         socket.tvSessionId = session.id
         const playersResult = await pool.query(
-          `SELECT id, player_name, ac, max_hp, current_hp
+          `SELECT id, player_name, ac, max_hp, current_hp, dnd_class, avatar_url
            FROM players WHERE session_id = $1 ORDER BY joined_at ASC`, [session.id])
         socket.emit('tv-snapshot', { session: { id: session.id, name: session.name }, players: playersResult.rows })
       } catch (err) { console.error(err) }
