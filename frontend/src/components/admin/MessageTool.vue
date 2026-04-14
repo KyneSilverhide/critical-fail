@@ -1,0 +1,245 @@
+<script setup>
+import { ref, computed } from 'vue'
+import { sessionStore } from '../../stores/session.js'
+import { authStore } from '../../stores/auth.js'
+import { getSocket } from '../../socket.js'
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+
+const selectedPlayerId = ref('all')
+const messageText = ref('')
+const imageFile = ref(null)
+const messageType = ref('text')
+const sending = ref(false)
+const feedback = ref('')
+
+const hasSession = computed(() => !!sessionStore.activeSession)
+
+function onFileChange(e) {
+  imageFile.value = e.target.files[0] || null
+}
+
+async function sendMessage() {
+  if (!hasSession.value) {
+    feedback.value = 'Aucune session active.'
+    return
+  }
+  if (messageType.value === 'text' && !messageText.value.trim()) {
+    feedback.value = 'Message vide.'
+    return
+  }
+  sending.value = true
+  feedback.value = ''
+
+  try {
+    let content = messageText.value
+
+    if (messageType.value === 'image' && imageFile.value) {
+      const formData = new FormData()
+      formData.append('file', imageFile.value)
+      const res = await fetch(`${BACKEND_URL}/api/uploads`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authStore.token}` },
+        body: formData,
+      })
+      const data = await res.json()
+      content = data.url
+    }
+
+    const socket = getSocket(authStore.token)
+    socket.emit('send-message', {
+      sessionId: sessionStore.activeSession.id,
+      toPlayerId: selectedPlayerId.value === 'all' ? null : parseInt(selectedPlayerId.value),
+      type: messageType.value,
+      content,
+    })
+
+    feedback.value = 'Message envoyé !'
+    messageText.value = ''
+    imageFile.value = null
+    setTimeout(() => { feedback.value = '' }, 3000)
+  } catch {
+    feedback.value = "Erreur lors de l'envoi."
+  } finally {
+    sending.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="message-tool">
+    <h2 class="section-title">✦ Envoyer un Message</h2>
+
+    <div v-if="!hasSession" class="no-session">
+      <p>Aucune session active. Créez ou sélectionnez une session d'abord.</p>
+    </div>
+
+    <template v-else>
+      <div class="form-group">
+        <label class="form-label">Destinataire</label>
+        <select v-model="selectedPlayerId" class="form-select">
+          <option value="all">Tous les joueurs</option>
+          <option v-for="p in sessionStore.players" :key="p.id" :value="p.id">
+            {{ p.player_name }}
+          </option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <div class="type-toggle">
+          <button
+            class="toggle-btn"
+            :class="{ active: messageType === 'text' }"
+            @click="messageType = 'text'"
+          >Texte</button>
+          <button
+            class="toggle-btn"
+            :class="{ active: messageType === 'image' }"
+            @click="messageType = 'image'"
+          >Image</button>
+        </div>
+      </div>
+
+      <div class="form-group" v-if="messageType === 'text'">
+        <label class="form-label">Message</label>
+        <textarea
+          v-model="messageText"
+          class="form-textarea"
+          placeholder="Votre message…"
+          rows="4"
+        ></textarea>
+      </div>
+
+      <div class="form-group" v-else>
+        <label class="form-label">Image</label>
+        <input type="file" accept="image/*" @change="onFileChange" class="form-file" />
+      </div>
+
+      <p v-if="feedback" class="feedback" :class="{ error: feedback.includes('Erreur') }">
+        {{ feedback }}
+      </p>
+
+      <button class="send-btn" @click="sendMessage" :disabled="sending">
+        {{ sending ? 'Envoi…' : '✉️ Envoyer' }}
+      </button>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.message-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-title {
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-gold-dark);
+}
+
+.no-session {
+  font-family: var(--font-body);
+  font-style: italic;
+  color: var(--color-text-dim);
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.form-label {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.form-select,
+.form-textarea {
+  background: #1e1508;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  color: var(--color-parchment);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-select:focus,
+.form-textarea:focus { border-color: var(--color-gold-dark); }
+
+.form-textarea { resize: vertical; }
+
+.form-file {
+  color: var(--color-text-dim);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+}
+
+.type-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 0.5rem;
+  background: #1e1508;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn.active {
+  border-color: var(--color-gold-dark);
+  color: var(--color-gold-bright);
+  background: rgba(201,168,76,0.08);
+}
+
+.feedback {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: #2fb896;
+  text-align: center;
+}
+
+.feedback.error { color: #ff6b6b; }
+
+.send-btn {
+  padding: 0.85rem;
+  background: linear-gradient(160deg, #2a3a4a, #1a2a3a);
+  border: 1px solid #3a5a7a;
+  border-radius: 8px;
+  color: var(--color-parchment);
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: linear-gradient(160deg, #3a4a5a, #2a3a4a);
+  box-shadow: 0 4px 20px rgba(58,90,122,0.4);
+}
+
+.send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+</style>
