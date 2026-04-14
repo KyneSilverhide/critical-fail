@@ -71,8 +71,8 @@ const typeLabel = computed(() => {
 </script>
 
 <template>
-  <div class="app-wrapper">
-    <!-- Header -->
+  <div class="app-wrapper" :class="'theme-' + combatType">
+  <!-- Header -->
     <header class="app-header">
       <div class="skull-ornament">💀</div>
       <h1 class="app-title">Échec<br/><span class="title-accent">Critique</span></h1>
@@ -131,16 +131,6 @@ const typeLabel = computed(() => {
     <!-- Result area -->
     <section class="result-section" v-if="diceValue !== null">
       <div class="result-card" :class="{ visible: showResult }">
-        <div class="result-header">
-          <span class="result-type-icon">{{ combatTypes.find(t => t.key === combatType)?.icon }}</span>
-          <div class="result-header-text">
-            <span class="result-roll-label">Résultat : </span>
-            <span class="result-roll-value">{{ diceValue }}</span>
-          </div>
-        </div>
-        <div class="result-divider">
-          <span>⚜</span>
-        </div>
         <p class="result-text">{{ result }}</p>
         <div class="result-footer">
           <span class="result-type-badge">{{ typeLabel }}</span>
@@ -258,7 +248,7 @@ const typeLabel = computed(() => {
   align-items: center;
   gap: 0.3rem;
   padding: 0.75rem 0.5rem;
-  background: linear-gradient(160deg, #1e160b 0%, #120d06 100%);
+  background: linear-gradient(160deg, #2e2010 0%, #1e1508 100%);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   color: var(--color-text-dim);
@@ -284,9 +274,10 @@ const typeLabel = computed(() => {
 }
 
 .type-btn.active {
-  border-color: var(--color-gold-dark);
-  color: var(--color-gold-bright);
-  box-shadow: 0 0 12px rgba(201,168,76,0.2), inset 0 0 8px rgba(201,168,76,0.05);
+  border-color: var(--theme-accent, var(--color-gold-dark));
+  color: var(--theme-accent-light, var(--color-gold-bright));
+  box-shadow: 0 0 16px var(--theme-glow, rgba(201,168,76,0.2)), inset 0 0 8px var(--theme-accent-shadow, rgba(201,168,76,0.05));
+  transition: all 0.3s ease;
 }
 
 .type-btn:disabled {
@@ -352,28 +343,23 @@ const typeLabel = computed(() => {
   width: 100%;
   height: 100%;
   position: relative;
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,0.7)) drop-shadow(0 0 12px rgba(201,168,76,0.15));
 }
 
 .dice-face {
   width: 100%;
   height: 100%;
-  background: linear-gradient(145deg, #2a1a0a, #1a0f05);
-  border: 2px solid var(--color-gold-dark);
-  border-radius: 16px;
+  background: radial-gradient(circle at 38% 35%, #4e3418, #32200a 55%, #1e1106);
+  border: 2.5px solid var(--color-gold-dark);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow:
-    0 0 0 1px rgba(201,168,76,0.15),
-    0 4px 20px rgba(0,0,0,0.8),
-    inset 0 1px 0 rgba(255,255,255,0.05),
-    inset 0 0 20px rgba(139,26,26,0.1);
-  clip-path: polygon(
-    20% 0%, 80% 0%,
-    100% 20%, 100% 80%,
-    80% 100%, 20% 100%,
-    0% 80%, 0% 20%
-  );
+    0 0 0 4px rgba(201,168,76,0.08),
+    inset 0 2px 0 rgba(255,255,255,0.07),
+    inset 0 0 24px rgba(139,60,10,0.2);
+  position: relative;
 }
 
 .dice-number {
@@ -481,14 +467,14 @@ const typeLabel = computed(() => {
 }
 
 .result-card {
-  background: linear-gradient(160deg, #1e140a 0%, #140d05 100%);
+  background: linear-gradient(160deg, #2a1e10 0%, #1e1408 100%);
   border: 1px solid var(--color-gold-dark);
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow:
-    0 0 0 1px rgba(201,168,76,0.1),
-    0 8px 32px rgba(0,0,0,0.6),
-    inset 0 0 40px rgba(139,26,26,0.05);
+    0 0 0 1px rgba(201,168,76,0.12),
+    0 8px 32px rgba(0,0,0,0.5),
+    inset 0 0 40px rgba(139,80,10,0.06);
   opacity: 0;
   transform: translateY(16px);
   transition: opacity 0.4s ease, transform 0.4s ease;
@@ -512,32 +498,13 @@ const typeLabel = computed(() => {
 .result-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  justify-content: center;
+  margin-bottom: 0.5rem;
 }
 
 .result-type-icon {
-  font-size: 1.8rem;
-  filter: drop-shadow(0 0 6px rgba(201,168,76,0.4));
-}
-
-.result-header-text {
-  font-family: var(--font-heading);
-  font-size: 0.9rem;
-}
-
-.result-roll-label {
-  color: var(--color-text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.75rem;
-}
-
-.result-roll-value {
-  color: var(--color-gold-bright);
-  font-size: 1.3rem;
-  font-weight: 700;
-  text-shadow: 0 0 10px rgba(240,192,64,0.5);
+  font-size: 2.2rem;
+  filter: drop-shadow(0 0 8px rgba(201,168,76,0.5));
 }
 
 .result-divider {
@@ -569,10 +536,9 @@ const typeLabel = computed(() => {
 
 .result-text {
   font-family: var(--font-body);
-  font-size: 1.05rem;
+  font-size: 1.25rem;
   line-height: 1.65;
   color: var(--color-parchment);
-  font-style: italic;
   text-align: center;
   padding: 0 0.25rem;
 }
@@ -606,4 +572,159 @@ const typeLabel = computed(() => {
   text-transform: uppercase;
   color: var(--color-border);
 }
+
+/* ── D&D Beyond Themes ── */
+
+.app-wrapper.theme-melee {
+  --theme-accent: #c41e3a;
+  --theme-accent-light: #ff6b6b;
+  --theme-accent-dark: #8b0000;
+  --theme-glow: rgba(196, 30, 58, 0.4);
+  --theme-accent-shadow: rgba(196, 30, 58, 0.1);
+}
+
+.app-wrapper.theme-distance {
+  --theme-accent: #1b8b6f;
+  --theme-accent-light: #2fb896;
+  --theme-accent-dark: #0d5c42;
+  --theme-glow: rgba(27, 139, 111, 0.4);
+  --theme-accent-shadow: rgba(27, 139, 111, 0.1);
+}
+
+.app-wrapper.theme-magique {
+  --theme-accent: #7b2cbf;
+  --theme-accent-light: #b391ff;
+  --theme-accent-dark: #560bad;
+  --theme-glow: rgba(123, 44, 191, 0.4);
+  --theme-accent-shadow: rgba(123, 44, 191, 0.1);
+}
+
+/* Dé - Couleurs adaptées par thème */
+.app-wrapper.theme-melee .dice-face {
+  border-color: var(--theme-accent);
+  background: radial-gradient(circle at 38% 35%, #8b4513, #5c2e0f 55%, #3d1f08);
+  box-shadow:
+      0 0 0 4px rgba(196, 30, 58, 0.1),
+      inset 0 2px 0 rgba(255,255,255,0.07),
+      inset 0 0 24px rgba(196, 30, 58, 0.15);
+}
+
+.app-wrapper.theme-distance .dice-face {
+  border-color: var(--theme-accent);
+  background: radial-gradient(circle at 38% 35%, #2d5f4f, #1d3f2f 55%, #0d2415);
+  box-shadow:
+      0 0 0 4px rgba(27, 139, 111, 0.1),
+      inset 0 2px 0 rgba(255,255,255,0.07),
+      inset 0 0 24px rgba(27, 139, 111, 0.15);
+}
+
+.app-wrapper.theme-magique .dice-face {
+  border-color: var(--theme-accent);
+  background: radial-gradient(circle at 38% 35%, #6b3fa0, #4b2f70 55%, #2b1f40);
+  box-shadow:
+      0 0 0 4px rgba(123, 44, 191, 0.1),
+      inset 0 2px 0 rgba(255,255,255,0.07),
+      inset 0 0 24px rgba(123, 44, 191, 0.15);
+}
+
+/* Cartes résultat - Couleurs adaptées par thème */
+.app-wrapper.theme-melee .result-card {
+  border-color: var(--theme-accent);
+  background: linear-gradient(160deg, rgba(196, 30, 58, 0.1) 0%, rgba(139, 0, 0, 0.05) 100%);
+  box-shadow:
+      0 0 0 1px var(--theme-accent),
+      0 8px 32px rgba(196, 30, 58, 0.2),
+      inset 0 0 40px var(--theme-accent-shadow);
+}
+
+.app-wrapper.theme-distance .result-card {
+  border-color: var(--theme-accent);
+  background: linear-gradient(160deg, rgba(27, 139, 111, 0.1) 0%, rgba(13, 92, 66, 0.05) 100%);
+  box-shadow:
+      0 0 0 1px var(--theme-accent),
+      0 8px 32px rgba(27, 139, 111, 0.2),
+      inset 0 0 40px var(--theme-accent-shadow);
+}
+
+.app-wrapper.theme-magique .result-card {
+  border-color: var(--theme-accent);
+  background: linear-gradient(160deg, rgba(123, 44, 191, 0.1) 0%, rgba(86, 11, 173, 0.05) 100%);
+  box-shadow:
+      0 0 0 1px var(--theme-accent),
+      0 8px 32px rgba(123, 44, 191, 0.2),
+      inset 0 0 40px var(--theme-accent-shadow);
+}
+
+/* Badge de type - Couleurs adaptées par thème */
+.app-wrapper.theme-melee .result-type-badge {
+  color: var(--theme-accent);
+  background: rgba(196, 30, 58, 0.1);
+  border-color: var(--theme-accent);
+}
+
+.app-wrapper.theme-distance .result-type-badge {
+  color: var(--theme-accent);
+  background: rgba(27, 139, 111, 0.1);
+  border-color: var(--theme-accent);
+}
+
+.app-wrapper.theme-magique .result-type-badge {
+  color: var(--theme-accent);
+  background: rgba(123, 44, 191, 0.1);
+  border-color: var(--theme-accent);
+}
+
+/* Numéro du dé - Couleurs adaptées par thème */
+.app-wrapper.theme-melee .dice-number {
+  color: #ff6b6b;
+  text-shadow:
+      0 0 20px rgba(255, 107, 107, 0.8),
+      0 0 40px rgba(255, 107, 107, 0.3),
+      2px 2px 0 rgba(0,0,0,0.8);
+}
+
+.app-wrapper.theme-distance .dice-number {
+  color: #2fb896;
+  text-shadow:
+      0 0 20px rgba(47, 184, 150, 0.8),
+      0 0 40px rgba(47, 184, 150, 0.3),
+      2px 2px 0 rgba(0,0,0,0.8);
+}
+
+.app-wrapper.theme-magique .dice-number {
+  color: #b391ff;
+  text-shadow:
+      0 0 20px rgba(179, 145, 255, 0.8),
+      0 0 40px rgba(179, 145, 255, 0.3),
+      2px 2px 0 rgba(0,0,0,0.8);
+}
+
+/* Divider du résultat - Couleurs adaptées par thème */
+.app-wrapper.theme-melee .result-divider {
+  color: var(--theme-accent);
+}
+
+.app-wrapper.theme-melee .result-divider::before,
+.app-wrapper.theme-melee .result-divider::after {
+  background: linear-gradient(90deg, transparent, var(--theme-accent));
+}
+
+.app-wrapper.theme-distance .result-divider {
+  color: var(--theme-accent);
+}
+
+.app-wrapper.theme-distance .result-divider::before,
+.app-wrapper.theme-distance .result-divider::after {
+  background: linear-gradient(90deg, transparent, var(--theme-accent));
+}
+
+.app-wrapper.theme-magique .result-divider {
+  color: var(--theme-accent);
+}
+
+.app-wrapper.theme-magique .result-divider::before,
+.app-wrapper.theme-magique .result-divider::after {
+  background: linear-gradient(90deg, transparent, var(--theme-accent));
+}
+
 </style>
