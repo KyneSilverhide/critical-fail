@@ -1,0 +1,22 @@
+[
+  { "min": 1, "max": 5, "result": "La corde de votre arc se casse. Il vous faut 1d4 minutes pour la réparer ou changer d'arme." },
+  { "min": 6, "max": 10, "result": "Votre projectile repart en arrière ! Vous vous touchez vous-même pour la moitié des dégâts." },
+  { "min": 11, "max": 15, "result": "Vous tirez accidentellement sur un allié au hasard (1d6 dégâts)." },
+  { "min": 16, "max": 20, "result": "Votre arme de jet vous échappe des mains. Elle atterrit 1d6 mètres devant vous." },
+  { "min": 21, "max": 25, "result": "Votre projectile frappe un obstacle et ricoche, frappant un allié pour 1d4 dégâts." },
+  { "min": 26, "max": 30, "result": "Vous trébuchez en tirant. Vous tombez à terre et devez vous relever au prochain tour." },
+  { "min": 31, "max": 35, "result": "Vous gaspillez 1d3 munitions supplémentaires en tirant frénétiquement dans la mauvaise direction." },
+  { "min": 36, "max": 40, "result": "Mauvaise visée ! Votre projectile se perd dans la nature. Désavantage à votre prochaine attaque à distance." },
+  { "min": 41, "max": 45, "result": "Votre arme de jet se bloque. Il faut une action entière pour la débloquer." },
+  { "min": 46, "max": 50, "result": "Vous tirez trop tôt. Le projectile part dans une direction aléatoire sans faire de dégâts." },
+  { "min": 51, "max": 55, "result": "Votre carquois se renverse. Vous perdez 1d6 munitions éparpillées au sol." },
+  { "min": 56, "max": 60, "result": "Mauvaise prise ! Vous vous blessez à la main. Désavantage aux attaques à distance jusqu'aux soins." },
+  { "min": 61, "max": 65, "result": "Votre tir est dévié par le vent. L'ennemi le plus proche de votre cible prend les dégâts à la place." },
+  { "min": 66, "max": 70, "result": "Votre corde d'arc vibre douloureusement sur votre bras. Vous perdez 3 PV et votre concentration." },
+  { "min": 71, "max": 75, "result": "Vous tirez dans le dos d'un allié par erreur (dégâts normaux)." },
+  { "min": 76, "max": 80, "result": "Votre projectile se fiche dans le sol à vos pieds. Vous vous tordez le cheville : vitesse réduite de 3m." },
+  { "min": 81, "max": 85, "result": "Vous suréstimiez la distance. Le projectile tombe à mi-chemin, sans effet." },
+  { "min": 86, "max": 90, "result": "Votre arme de tir se dérégle. Elle nécessite une action pour être recalibrée avant de pouvoir tirer." },
+  { "min": 91, "max": 95, "result": "Votre projectile explose prématurément (ou ricochet violent). Vous et tous vos alliés à 3m prenez 1d4 dégâts." },
+  { "min": 96, "max": 100, "result": "Votre arme à distance se brise ! Inutilisable jusqu'à réparation complète chez un artisan." }
+]

@@ -1,0 +1,22 @@
+[
+  { "min": 1, "max": 5, "result": "Retour de flamme ! Le sort explose en votre visage. Subissez les dégâts/effets complets du sort." },
+  { "min": 6, "max": 10, "result": "Surge magique ! Lancez sur la table des surges magiques. Un effet aléatoire se produit." },
+  { "min": 11, "max": 15, "result": "Vous perdez la concentration. Tous vos sorts actifs sont annulés immédiatement." },
+  { "min": 16, "max": 20, "result": "Le sort rate et se transforme en lumière aveuglante. Vous êtes Aveuglé jusqu'à la fin de votre prochain tour." },
+  { "min": 21, "max": 25, "result": "Vous invoquez accidentellement une créature hostile de faible niveau (CR 1) à côté de vous." },
+  { "min": 26, "max": 30, "result": "Votre sort frappe l'allié le plus proche au lieu de votre cible (mêmes dégâts)." },
+  { "min": 31, "max": 35, "result": "Vous vous trompez de sort ! Le sort lancé est un sort aléatoire de niveau inférieur." },
+  { "min": 36, "max": 40, "result": "L'énergie magique rebondit. Le sort rate et vous perdez l'emplacement de sort sans effet." },
+  { "min": 41, "max": 45, "result": "Votre sort attire l'attention de forces obscures. Un pressentiment maléfique vous envahit. Désavantage aux jets de sauvegarde sagesse ce combat." },
+  { "min": 46, "max": 50, "result": "Canalisation interrompue. Vous êtes Étourdi jusqu'à la fin de votre prochain tour." },
+  { "min": 51, "max": 55, "result": "Le tissu magique se déchire légèrement. Les soins que vous recevez sont réduits de moitié jusqu'au prochain repos." },
+  { "min": 56, "max": 60, "result": "Votre sort part en tous sens. Il touche 1d4 cibles aléatoires (alliés et ennemis) pour la moitié des dégâts." },
+  { "min": 61, "max": 65, "result": "Surcharge arcanique ! Vous subissez 2d6 dégâts de force et êtes repoussé de 3 mètres." },
+  { "min": 66, "max": 70, "result": "Votre composante verbale se transforme en malédiction. Vous êtes Maudit jusqu'à la prochaine aube." },
+  { "min": 71, "max": 75, "result": "Fuite de mana ! Vous perdez un emplacement de sort supplémentaire du niveau le plus élevé disponible." },
+  { "min": 76, "max": 80, "result": "Le sort crée une zone d'antimagie de 2m autour de vous pendant 1 round." },
+  { "min": 81, "max": 85, "result": "Votre sort attire un élémentaire hostile (niveau CR 3) qui apparaît et attaque immédiatement." },
+  { "min": 86, "max": 90, "result": "Épuisement arcanique ! Vous gagnez 1 niveau d'épuisement." },
+  { "min": 91, "max": 95, "result": "Corruption magique ! Un de vos sorts connus est temporairement remplacé par son opposé jusqu'au prochain repos long." },
+  { "min": 96, "max": 100, "result": "Catastrophe arcaniste ! Tous vos emplacements de sorts sont perdus. Vous devez effectuer un repos long pour les récupérer." }
+]
