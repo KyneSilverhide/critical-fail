@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getSocket } from '../socket.js'
 import { sessionStore } from '../stores/session.js'
+import { getProfile, saveProfile } from '../utils/playerProfiles.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -11,10 +12,58 @@ const sessionCode = ref(route.params.code || '')
 const playerName = ref('')
 const hp = ref(20)
 const ac = ref(10)
+const dndClass = ref('')
+const avatarFile = ref(null)
+const avatarPreview = ref(null)
 const error = ref('')
 const loading = ref(false)
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+
+const DND_CLASSES = [
+  'Barbare', 'Barde', 'Clerc', 'Druide', 'Guerrier',
+  'Moine', 'Paladin', 'Rôdeur', 'Roublard',
+  'Ensorceleur', 'Occultiste', 'Magicien',
+]
+
+// Auto-fill from localStorage when playerName changes
+watch(playerName, (name) => {
+  const profile = getProfile(name)
+  if (profile) {
+    if (profile.dndClass) dndClass.value = profile.dndClass
+    if (profile.avatarUrl) avatarPreview.value = profile.avatarUrl
+  } else {
+    dndClass.value = ''
+    avatarPreview.value = null
+    avatarFile.value = null
+  }
+})
+
+function onAvatarChange(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  avatarFile.value = file
+  const reader = new FileReader()
+  reader.onload = (e) => { avatarPreview.value = e.target.result }
+  reader.readAsDataURL(file)
+}
+
+async function uploadAvatar() {
+  if (!avatarFile.value) return null
+  const formData = new FormData()
+  formData.append('file', avatarFile.value)
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/uploads/avatar`, {
+      method: 'POST',
+      body: formData,
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.url || null
+  } catch {
+    return null
+  }
+}
 
 async function joinSession() {
   if (!sessionCode.value || !playerName.value) {
@@ -32,6 +81,15 @@ async function joinSession() {
       return
     }
 
+    // Upload avatar if a new file was selected
+    let avatarUrl = null
+    if (avatarFile.value) {
+      avatarUrl = await uploadAvatar()
+    } else if (avatarPreview.value && avatarPreview.value.startsWith('/uploads/')) {
+      // Re-use previously stored server URL
+      avatarUrl = avatarPreview.value
+    }
+
     const socket = getSocket()
 
     socket.emit('join-session', {
@@ -39,9 +97,17 @@ async function joinSession() {
       playerName: playerName.value,
       ac: ac.value,
       hp: hp.value,
+      dndClass: dndClass.value || null,
+      avatarUrl,
     })
 
     socket.once('session-joined', (data) => {
+      // Persist profile to localStorage
+      saveProfile(playerName.value, {
+        dndClass: dndClass.value,
+        avatarUrl: data.player.avatar_url || avatarUrl,
+      })
+
       sessionStore.setActiveSession(data.session)
       sessionStore.playerInfo = {
         id: data.player.id,
@@ -49,6 +115,8 @@ async function joinSession() {
         ac: data.player.ac,
         hp: data.player.current_hp,
         maxHp: data.player.max_hp,
+        dndClass: data.player.dnd_class,
+        avatarUrl: data.player.avatar_url,
       }
       router.push('/player')
     })
@@ -85,6 +153,39 @@ async function joinSession() {
         <div class="form-group">
           <label class="form-label">Nom du personnage</label>
           <input v-model="playerName" type="text" class="form-input" placeholder="Gandalf le Gris" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <span class="stat-icon">🧙</span> Classe D&amp;D
+          </label>
+          <select v-model="dndClass" class="form-input form-select">
+            <option value="">— Choisir une classe —</option>
+            <option v-for="cls in DND_CLASSES" :key="cls" :value="cls">{{ cls }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <span class="stat-icon">🖼️</span> Avatar du personnage
+          </label>
+          <div class="avatar-upload-row">
+            <div v-if="avatarPreview" class="avatar-preview-wrap">
+              <img
+                :src="avatarPreview.startsWith('/uploads/') ? BACKEND_URL + avatarPreview : avatarPreview"
+                alt="Aperçu avatar"
+                class="avatar-preview"
+              />
+            </div>
+            <div v-else class="avatar-placeholder">
+              <span>👤</span>
+            </div>
+            <label class="avatar-upload-btn">
+              {{ avatarPreview ? 'Changer' : 'Choisir une image' }}
+              <input type="file" accept="image/*" class="avatar-input-hidden" @change="onAvatarChange" />
+            </label>
+          </div>
+          <p class="form-hint">JPG, PNG ou GIF · max 2 Mo</p>
         </div>
 
         <div class="form-row">
@@ -201,6 +302,15 @@ async function joinSession() {
   outline: none;
   transition: border-color 0.2s;
 }
+.form-select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b5a3a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9rem center;
+  padding-right: 2.5rem;
+}
+.form-select option { background: #1e1508; color: var(--color-parchment); }
 .stat-input { text-align: center; font-size: 1.3rem; font-weight: 700; padding: 0.75rem 0.5rem; }
 .form-input:focus { border-color: var(--color-gold-dark); }
 .form-input::placeholder { color: var(--color-border); }
@@ -210,6 +320,55 @@ async function joinSession() {
   font-size: 0.8rem;
   color: var(--color-text-dim);
 }
+
+/* Avatar upload */
+.avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.avatar-preview-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--color-gold-dark);
+  flex-shrink: 0;
+}
+.avatar-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+  border: 2px dashed var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+.avatar-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.avatar-upload-btn:hover { border-color: var(--color-gold-dark); color: var(--color-gold); }
+.avatar-input-hidden { display: none; }
 
 .form-error {
   color: #ff6b6b;

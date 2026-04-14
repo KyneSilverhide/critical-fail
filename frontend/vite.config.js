@@ -8,5 +8,9 @@ export default defineConfig({
       '/api': 'http://localhost:3000',
       '/uploads': 'http://localhost:3000',
     }
-  }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+  },
 })
