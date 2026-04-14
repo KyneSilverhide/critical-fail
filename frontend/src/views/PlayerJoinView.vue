@@ -32,6 +32,10 @@ watch(playerName, (name) => {
   if (profile) {
     if (profile.dndClass) dndClass.value = profile.dndClass
     if (profile.avatarUrl) avatarPreview.value = profile.avatarUrl
+  } else {
+    dndClass.value = ''
+    avatarPreview.value = null
+    avatarFile.value = null
   }
 })
 

@@ -58,7 +58,7 @@ onMounted(() => {
   socket.on('tv-snapshot', ({ session: s, players: p }) => {
     session.value = s
     players.value = p
-    // Initialise previousHp tracking
+    // Initialize previousHp tracking
     p.forEach(pl => { previousHp.value[pl.id] = pl.current_hp })
   })
 
