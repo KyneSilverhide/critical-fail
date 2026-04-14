@@ -10,6 +10,7 @@ const diceValue = ref(null)
 const result = ref(null)
 const animatedDice = ref(null)
 const showResult = ref(false)
+const collapseHeader = ref(false)
 
 const tables = {
   melee: meleeTable,
@@ -29,7 +30,9 @@ function selectType(type) {
   result.value = null
   diceValue.value = null
   showResult.value = false
+  collapseHeader.value = false
 }
+
 
 function getResult(roll, table) {
   return table.find(entry => roll >= entry.min && roll <= entry.max) || null
@@ -40,6 +43,7 @@ async function rollDice() {
   isRolling.value = true
   showResult.value = false
   result.value = null
+  collapseHeader.value = true  // ← AJOUTER CETTE LIGNE (avant l'animation)
 
   const finalRoll = Math.floor(Math.random() * 100) + 1
 
@@ -73,8 +77,8 @@ const typeLabel = computed(() => {
 <template>
   <div class="app-wrapper" :class="'theme-' + combatType">
   <!-- Header -->
-    <header class="app-header">
-      <div class="skull-ornament">💀</div>
+    <header class="app-header" :class="{ collapsed: collapseHeader }">
+    <div class="skull-ornament">💀</div>
       <h1 class="app-title">Échec<br/><span class="title-accent">Critique</span></h1>
       <p class="app-subtitle">Table des désastres héroïques</p>
       <div class="header-divider">
@@ -725,6 +729,29 @@ const typeLabel = computed(() => {
 .app-wrapper.theme-magique .result-divider::before,
 .app-wrapper.theme-magique .result-divider::after {
   background: linear-gradient(90deg, transparent, var(--theme-accent));
+}
+
+/* ── Header Collapse Animation ── */
+.app-header {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 300px;
+  overflow: hidden;
+}
+
+.app-header.collapsed {
+  opacity: 0;
+  transform: translateY(-100%);
+  max-height: 0;
+  padding: 0;
+  margin: 0;
+}
+
+/* Type selector - reste visible mais remonte */
+.type-selector {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(0);
 }
 
 </style>
