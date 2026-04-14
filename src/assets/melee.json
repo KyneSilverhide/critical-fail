@@ -1,0 +1,22 @@
+[
+  { "min": 1, "max": 5, "result": "Coup fatal sur vous-même ! Vous vous infligez le double de vos dégâts normaux." },
+  { "min": 6, "max": 10, "result": "Vous lâchez votre arme ! Elle tombe à 1d6 mètres dans une direction aléatoire." },
+  { "min": 11, "max": 15, "result": "Votre arme se retourne contre vous. Vous subissez vos propres dégâts d'arme." },
+  { "min": 16, "max": 20, "result": "Vous glissez et tombez à terre. Votre prochain tour est utilisé pour vous relever." },
+  { "min": 21, "max": 25, "result": "Coup dévié ! Vous frappez un allié adjacent (1d6 dégâts)." },
+  { "min": 26, "max": 30, "result": "Vous trébuchez vers votre adversaire. Il bénéficie d'une attaque d'opportunité gratuite." },
+  { "min": 31, "max": 35, "result": "Votre grip se relâche. Vous devez utiliser une action bonus pour saisir de nouveau votre arme." },
+  { "min": 36, "max": 40, "result": "Faux mouvement ! Vous vous tordez le poignet. Désavantage aux attaques jusqu'à la fin du combat." },
+  { "min": 41, "max": 45, "result": "Vous cognez votre arme contre une surface dure. Elle est ébréchée et perd 1 point de dégât temporairement." },
+  { "min": 46, "max": 50, "result": "Votre frappe manque de peu. L'élan vous déséquilibre : -2 à la CA jusqu'à votre prochain tour." },
+  { "min": 51, "max": 55, "result": "Votre adversaire détourne votre arme. Vous perdez votre action bonus ce tour." },
+  { "min": 56, "max": 60, "result": "Vous vous blessez superficiellement. Perdez 2 points de vie." },
+  { "min": 61, "max": 65, "result": "Votre attaque manque lamentablement. Votre adversaire se moque de vous. Désavantage social jusqu'à la prochaine pause." },
+  { "min": 66, "max": 70, "result": "Mauvaise posture ! Vous vous déboîtez l'épaule. Votre vitesse est réduite de 3 mètres jusqu'aux soins." },
+  { "min": 71, "max": 75, "result": "Vous frappez dans le vide et perdez l'équilibre. Avantage pour votre adversaire sur sa prochaine attaque." },
+  { "min": 76, "max": 80, "result": "Votre arme se coince dans le bouclier ou l'armure adverse. Dépensez une action pour la récupérer." },
+  { "min": 81, "max": 85, "result": "Coup malencontreux dans votre propre jambe. Vous boitez : vitesse réduite de moitié pendant 1 round." },
+  { "min": 86, "max": 90, "result": "Vous titubez vers l'avant. L'adversaire peut vous pousser de 1d4 mètres sans action." },
+  { "min": 91, "max": 95, "result": "Votre attaque frénétique expose votre flanc. La prochaine attaque sur vous est un coup critique automatique." },
+  { "min": 96, "max": 100, "result": "Catastrophe totale ! Vous brisez votre arme. Elle est inutilisable jusqu'à réparation." }
+]
