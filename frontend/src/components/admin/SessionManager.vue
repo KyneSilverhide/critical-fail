@@ -148,7 +148,7 @@ onMounted(loadSessions)
       <h2 class="section-title">✦ Session Active</h2>
       <div class="session-card active">
         <p class="session-name">{{ sessionStore.activeSession.name }}</p>
-        <p class="session-code">{{ sessionStore.activeSession.code }}</p>
+        <div class="big-code">{{ sessionStore.activeSession.code }}</div>
         <p class="join-url">
           <a :href="joinUrl" target="_blank">{{ joinUrl }}</a>
         </p>
@@ -190,7 +190,7 @@ onMounted(loadSessions)
         <div class="session-card-inner">
           <div>
             <p class="session-name">{{ s.name }}</p>
-            <p class="session-code">{{ s.code.slice(0, 8) }}…</p>
+            <p class="session-code">{{ s.code }}</p>
           </div>
           <span class="session-status" :class="s.status">{{ s.status }}</span>
         </div>
@@ -295,6 +295,16 @@ onMounted(loadSessions)
   font-family: var(--font-heading);
   font-size: 0.95rem;
   color: var(--color-parchment);
+}
+
+.big-code {
+  font-family: var(--font-title);
+  font-size: 2.5rem;
+  color: var(--color-gold-bright);
+  text-shadow: 0 0 20px rgba(240,192,64,0.4);
+  letter-spacing: 0.2em;
+  text-align: center;
+  padding: 0.5rem 0;
 }
 
 .session-code {

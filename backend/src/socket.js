@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken')
+const QRCode = require('qrcode')
 const pool = require('./db')
 
 function setupSocket(io) {
@@ -86,9 +87,10 @@ function setupSocket(io) {
       if (!socket.playerId || !socket.sessionId) return
       try {
         const hp = Math.max(0, parseInt(newHp) || 0)
-        const prev = await pool.query('SELECT current_hp, player_name FROM players WHERE id = $1', [socket.playerId])
+        const prev = await pool.query('SELECT current_hp, player_name, is_concentrating FROM players WHERE id = $1', [socket.playerId])
         const oldHp = prev.rows[0]?.current_hp ?? 0
         const playerName = prev.rows[0]?.player_name ?? 'Inconnu'
+        const wasConcentrating = prev.rows[0]?.is_concentrating ?? false
         await pool.query('UPDATE players SET current_hp = $1 WHERE id = $2', [hp, socket.playerId])
         const event = { playerId: socket.playerId, newHp: hp }
         io.to(`admin:${socket.sessionId}`).emit('hp-updated', event)
@@ -102,9 +104,19 @@ function setupSocket(io) {
           if (hp === 0) {
             eventType = 'death'
             description = `${playerName} est tombé à 0 PV !`
+            if (wasConcentrating) {
+              await pool.query('UPDATE players SET is_concentrating = FALSE WHERE id = $1', [socket.playerId])
+              const concEvent = { playerId: socket.playerId, isConcentrating: false }
+              io.to(`admin:${socket.sessionId}`).emit('concentration-updated', concEvent)
+              io.to(`tv:${socket.sessionId}`).emit('concentration-updated', concEvent)
+            }
           } else if (delta < 0) {
             eventType = 'damage'
             description = `${playerName} subit ${Math.abs(delta)} dégâts (${oldHp} → ${hp} PV)`
+            if (wasConcentrating) {
+              const dc = Math.max(10, Math.ceil(Math.abs(delta) / 2))
+              socket.emit('concentration-warning', { damage: Math.abs(delta), dc })
+            }
           } else {
             eventType = 'heal'
             description = `${playerName} récupère ${delta} PV (${oldHp} → ${hp} PV)`
@@ -131,6 +143,18 @@ function setupSocket(io) {
       } catch (err) { console.error(err) }
     })
 
+    // ── Player: update concentration ────────────────────────────────────────
+    socket.on('update-concentration', async ({ isConcentrating }) => {
+      if (!socket.playerId || !socket.sessionId) return
+      try {
+        await pool.query('UPDATE players SET is_concentrating = $1 WHERE id = $2', [isConcentrating, socket.playerId])
+        const event = { playerId: socket.playerId, isConcentrating }
+        io.to(`admin:${socket.sessionId}`).emit('concentration-updated', event)
+        io.to(`tv:${socket.sessionId}`).emit('concentration-updated', event)
+        socket.emit('concentration-confirmed', { isConcentrating })
+      } catch (err) { console.error(err) }
+    })
+
     // ── Admin: join room + snapshot ─────────────────────────────────────────
     socket.on('admin-join', async (sessionId) => {
       if (!socket.admin) return
@@ -140,7 +164,7 @@ function setupSocket(io) {
         if (!sessionResult.rows[0]) return
         socket.join(`admin:${sessionId}`)
         const playersResult = await pool.query(
-          `SELECT id, session_id, player_name, socket_id, joined_at, ac, max_hp, current_hp, conditions
+          `SELECT id, session_id, player_name, socket_id, joined_at, ac, max_hp, current_hp, conditions, is_concentrating
            FROM players WHERE session_id = $1 ORDER BY joined_at ASC`, [sessionId])
         socket.emit('players-snapshot', { sessionId, players: playersResult.rows })
       } catch (err) { console.error(err) }
@@ -156,9 +180,144 @@ function setupSocket(io) {
         socket.join(`tv:${session.id}`)
         socket.tvSessionId = session.id
         const playersResult = await pool.query(
-          `SELECT id, player_name, ac, max_hp, current_hp, dnd_class, avatar_url, conditions
+          `SELECT id, player_name, ac, max_hp, current_hp, dnd_class, avatar_url, conditions, is_concentrating
            FROM players WHERE session_id = $1 ORDER BY joined_at ASC`, [session.id])
-        socket.emit('tv-snapshot', { session: { id: session.id, name: session.name }, players: playersResult.rows })
+
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+        const joinUrl = `${frontendUrl}/join/${session.code}`
+        const qrCodeDataUrl = await QRCode.toDataURL(joinUrl)
+
+        let activeVote = null
+        if (session.current_vote_id) {
+          const voteInfo = await pool.query('SELECT * FROM votes WHERE id = $1 AND status = $2', [session.current_vote_id, 'active'])
+          if (voteInfo.rows[0]) {
+            const v = voteInfo.rows[0]
+            const options = typeof v.options === 'string' ? JSON.parse(v.options) : v.options
+            const responses = await pool.query('SELECT option_index, player_name FROM vote_responses WHERE vote_id = $1', [v.id])
+            const results = options.map((_, i) => responses.rows.filter(r => r.option_index === i).length)
+            const totalPlayers = await pool.query('SELECT COUNT(*)::int AS total FROM players WHERE session_id = $1', [session.id])
+            activeVote = {
+              id: v.id, question: v.question, options, isAnonymous: v.is_anonymous,
+              results, totalPlayers: totalPlayers.rows[0].total, totalVotes: responses.rows.length,
+              voterNames: responses.rows.map(r => ({ name: r.player_name, optionIndex: r.option_index }))
+            }
+          }
+        }
+
+        socket.emit('tv-snapshot', {
+          session: { id: session.id, name: session.name },
+          players: playersResult.rows,
+          tvMode: session.tv_mode || 'lobby',
+          sessionCode: session.code,
+          qrCodeDataUrl,
+          currentImageUrl: session.current_image_url,
+          activeVote
+        })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: set TV mode ──────────────────────────────────────────────────
+    socket.on('set-tv-mode', async ({ sessionId, mode }) => {
+      if (!socket.admin) return
+      try {
+        await pool.query('UPDATE sessions SET tv_mode = $1 WHERE id = $2 AND created_by = $3', [mode, sessionId, socket.admin.id])
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: create vote ──────────────────────────────────────────────────
+    socket.on('create-vote', async ({ sessionId, question, options, isAnonymous }) => {
+      if (!socket.admin) return
+      try {
+        const voteRes = await pool.query(
+          'INSERT INTO votes (session_id, question, options, is_anonymous) VALUES ($1, $2, $3, $4) RETURNING *',
+          [sessionId, question, JSON.stringify(options), isAnonymous || false]
+        )
+        const vote = voteRes.rows[0]
+        await pool.query('UPDATE sessions SET tv_mode = $1, current_vote_id = $2 WHERE id = $3', ['vote', vote.id, sessionId])
+        const voteData = {
+          id: vote.id, question, options, isAnonymous: vote.is_anonymous,
+          results: options.map(() => 0), totalPlayers: 0, totalVotes: 0, voterNames: []
+        }
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'vote' })
+        io.to(`tv:${sessionId}`).emit('vote-started', voteData)
+        io.to(`session:${sessionId}`).emit('vote-started', voteData)
+        io.to(`admin:${sessionId}`).emit('vote-started', voteData)
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'vote' })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Player: submit vote ─────────────────────────────────────────────────
+    socket.on('submit-vote', async ({ voteId, optionIndex }) => {
+      if (!socket.playerId || !socket.sessionId) return
+      try {
+        const existing = await pool.query('SELECT id FROM vote_responses WHERE vote_id = $1 AND player_id = $2', [voteId, socket.playerId])
+        if (existing.rows[0]) { socket.emit('vote-error', { message: 'Vous avez déjà voté.' }); return }
+        const pname = await pool.query('SELECT player_name FROM players WHERE id = $1', [socket.playerId])
+        const playerName = pname.rows[0]?.player_name || 'Inconnu'
+        await pool.query('INSERT INTO vote_responses (vote_id, player_id, player_name, option_index) VALUES ($1, $2, $3, $4)', [voteId, socket.playerId, playerName, optionIndex])
+        socket.emit('vote-submitted', { optionIndex })
+
+        const voteInfo = await pool.query('SELECT * FROM votes WHERE id = $1', [voteId])
+        const vote = voteInfo.rows[0]
+        const options = typeof vote.options === 'string' ? JSON.parse(vote.options) : vote.options
+        const responses = await pool.query('SELECT option_index, player_name FROM vote_responses WHERE vote_id = $1', [voteId])
+        const results = options.map((_, i) => responses.rows.filter(r => r.option_index === i).length)
+        const totalPlayers = await pool.query('SELECT COUNT(*)::int AS total FROM players WHERE session_id = $1', [socket.sessionId])
+        const totalVotes = responses.rows.length
+        const voterNames = responses.rows.map(r => ({ name: r.player_name, optionIndex: r.option_index }))
+
+        const voteUpdate = {
+          id: voteId, question: vote.question, options, isAnonymous: vote.is_anonymous,
+          results, totalPlayers: totalPlayers.rows[0].total, totalVotes, voterNames
+        }
+        io.to(`tv:${socket.sessionId}`).emit('vote-updated', voteUpdate)
+        io.to(`admin:${socket.sessionId}`).emit('vote-updated', voteUpdate)
+
+        if (totalVotes >= totalPlayers.rows[0].total) {
+          const closed = await pool.query('UPDATE votes SET status = $1 WHERE id = $2 AND status = $3 RETURNING id', ['closed', voteId, 'active'])
+          if (closed.rows[0]) {
+            io.to(`tv:${socket.sessionId}`).emit('vote-closed', voteUpdate)
+            io.to(`session:${socket.sessionId}`).emit('vote-closed', voteUpdate)
+            io.to(`admin:${socket.sessionId}`).emit('vote-closed', voteUpdate)
+          }
+        }
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: close vote ───────────────────────────────────────────────────
+    socket.on('close-vote', async ({ sessionId }) => {
+      if (!socket.admin) return
+      try {
+        const sessionRes = await pool.query('SELECT current_vote_id FROM sessions WHERE id = $1', [sessionId])
+        const voteId = sessionRes.rows[0]?.current_vote_id
+        if (!voteId) return
+        await pool.query('UPDATE votes SET status = $1 WHERE id = $2', ['closed', voteId])
+        const voteInfo = await pool.query('SELECT * FROM votes WHERE id = $1', [voteId])
+        const vote = voteInfo.rows[0]
+        const options = typeof vote.options === 'string' ? JSON.parse(vote.options) : vote.options
+        const responses = await pool.query('SELECT option_index, player_name FROM vote_responses WHERE vote_id = $1', [voteId])
+        const results = options.map((_, i) => responses.rows.filter(r => r.option_index === i).length)
+        const totalPlayers = await pool.query('SELECT COUNT(*)::int AS total FROM players WHERE session_id = $1', [sessionId])
+        const voterNames = responses.rows.map(r => ({ name: r.player_name, optionIndex: r.option_index }))
+        const voteUpdate = {
+          id: voteId, question: vote.question, options, isAnonymous: vote.is_anonymous,
+          results, totalPlayers: totalPlayers.rows[0].total, totalVotes: responses.rows.length, voterNames
+        }
+        io.to(`tv:${sessionId}`).emit('vote-closed', voteUpdate)
+        io.to(`session:${sessionId}`).emit('vote-closed', voteUpdate)
+        io.to(`admin:${sessionId}`).emit('vote-closed', voteUpdate)
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: show image on TV ─────────────────────────────────────────────
+    socket.on('show-image', async ({ sessionId, imageUrl }) => {
+      if (!socket.admin) return
+      try {
+        await pool.query('UPDATE sessions SET tv_mode = $1, current_image_url = $2 WHERE id = $3 AND created_by = $4', ['image', imageUrl, sessionId, socket.admin.id])
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'image', imageUrl })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'image', imageUrl })
       } catch (err) { console.error(err) }
     })
 

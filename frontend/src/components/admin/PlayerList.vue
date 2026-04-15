@@ -52,6 +52,7 @@ function parseConditions(player) {
         <div class="player-row-top">
           <span class="player-icon">⚔️</span>
           <span class="player-name">{{ player.player_name }}</span>
+          <span v-if="player.is_concentrating" class="concentration-icon" title="Concentration">🎯</span>
           <span class="ac-badge">🛡️ {{ player.ac ?? '?' }}</span>
           <span class="hp-text" :style="{ color: hpColor(player) }">
             ❤️ {{ player.current_hp ?? '?' }}<span class="hp-max">/ {{ player.max_hp ?? '?' }}</span>
