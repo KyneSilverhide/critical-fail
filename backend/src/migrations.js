@@ -135,6 +135,8 @@ CREATE TABLE IF NOT EXISTS purchase_requests (
 );
 
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS current_merchant_id INTEGER;
+
+ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS batch_id UUID;
 `
 
 async function runMigrations() {

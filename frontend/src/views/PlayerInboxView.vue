@@ -7,11 +7,21 @@ import MessageCard from '../components/player/MessageCard.vue'
 
 const router = useRouter()
 const messages = ref([])
+const unreadMessages = ref(0)
 const playerInfo = ref(sessionStore.playerInfo || { name: 'Aventurier', hp: 20, maxHp: 20, ac: 10 })
 const sessionName = ref(sessionStore.activeSession?.name || 'Session')
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
-// HP tracking
+// ── Active tab ───────────────────────────────────────────────────────────
+// Tabs: 'statut' | 'conditions' | 'boutique' | 'vote' | 'messages'
+const activeTab = ref('statut')
+
+function switchTab(tab) {
+  activeTab.value = tab
+  if (tab === 'messages') unreadMessages.value = 0
+}
+
+// ── HP tracking ──────────────────────────────────────────────────────────
 const currentHp = ref(playerInfo.value?.hp ?? 20)
 const maxHp = ref(playerInfo.value?.maxHp ?? 20)
 const pendingHp = ref(currentHp.value)
@@ -26,9 +36,9 @@ const hpBarColor = computed(() => {
   return '#e03030'
 })
 
-// Concentration
+// ── Concentration ────────────────────────────────────────────────────────
 const isConcentrating = ref(false)
-const concentrationWarning = ref(null)
+const concentrationModal = ref(null) // { damage, dc }
 
 function toggleConcentration() {
   isConcentrating.value = !isConcentrating.value
@@ -36,7 +46,11 @@ function toggleConcentration() {
   socket.emit('update-concentration', { isConcentrating: isConcentrating.value })
 }
 
-// Conditions D&D 5e 2014
+function dismissConcentrationModal() {
+  concentrationModal.value = null
+}
+
+// ── Conditions D&D 5e ────────────────────────────────────────────────────
 const DND_CONDITIONS = [
   { id: 'blinded', label: 'Aveuglé', icon: '👁️' },
   { id: 'charmed', label: 'Charmé', icon: '💕' },
@@ -54,16 +68,12 @@ const DND_CONDITIONS = [
   { id: 'stunned', label: 'Étourdi', icon: '💫' },
   { id: 'unconscious', label: 'Inconscient', icon: '💤' },
 ]
-
 const activeConditions = ref([])
 
 function toggleCondition(conditionId) {
   const idx = activeConditions.value.indexOf(conditionId)
-  if (idx === -1) {
-    activeConditions.value.push(conditionId)
-  } else {
-    activeConditions.value.splice(idx, 1)
-  }
+  if (idx === -1) activeConditions.value.push(conditionId)
+  else activeConditions.value.splice(idx, 1)
   const socket = getSocket()
   socket.emit('update-conditions', { conditions: activeConditions.value })
 }
@@ -87,17 +97,79 @@ function leaveSession() {
   router.push('/')
 }
 
-// Vote
+// ── Vote ─────────────────────────────────────────────────────────────────
 const activeVote = ref(null)
 const myVote = ref(null)
+const hasNewVote = ref(false)
 
 function submitVote(optionIndex) {
   const socket = getSocket()
   socket.emit('submit-vote', { voteId: activeVote.value.id, optionIndex })
 }
 
-const handleNewMessage = (msg) => messages.value.push({ ...msg, kind: 'message' })
-const handleDiceResult = (data) => messages.value.push({ ...data, kind: 'dice' })
+// ── Merchant / Cart ──────────────────────────────────────────────────────
+const activeMerchant = ref(sessionStore.activeMerchant || null)
+const cart = ref({}) // itemId -> quantity (0 = not in cart)
+const cartSending = ref(false)
+// Purchase result modal
+const purchaseResultModal = ref(null) // { type: 'accepted'|'rejected', items, totalPrice }
+// Counter offers (legacy single-item)
+const counterOffers = ref([])
+
+const cartItemCount = computed(() =>
+  Object.values(cart.value).filter(q => q > 0).length
+)
+const cartTotal = computed(() => {
+  if (!activeMerchant.value) return 0
+  let total = 0
+  for (const item of activeMerchant.value.items) {
+    const qty = cart.value[item.id] || 0
+    total += qty * item.price
+  }
+  return total
+})
+
+function setCartQty(itemId, qty) {
+  cart.value = { ...cart.value, [itemId]: Math.max(0, qty) }
+}
+
+function submitCart() {
+  const socket = getSocket()
+  const items = []
+  for (const item of activeMerchant.value.items) {
+    const qty = cart.value[item.id] || 0
+    if (qty > 0 && item.stock !== 0) {
+      items.push({ itemId: item.id, quantity: qty })
+    }
+  }
+  if (items.length === 0) return
+  cartSending.value = true
+  socket.emit('request-batch-purchase', { items })
+}
+
+function clearCart() {
+  cart.value = {}
+}
+
+function respondCounterOffer(requestId, accept) {
+  const socket = getSocket()
+  socket.emit('respond-counter-offer', { requestId, accept })
+  counterOffers.value = counterOffers.value.filter(c => c.requestId !== requestId)
+}
+
+function dismissPurchaseModal() {
+  purchaseResultModal.value = null
+}
+
+// ── Socket handlers ──────────────────────────────────────────────────────
+const handleNewMessage = (msg) => {
+  messages.value.push({ ...msg, kind: 'message' })
+  if (activeTab.value !== 'messages') unreadMessages.value++
+}
+const handleDiceResult = (data) => {
+  messages.value.push({ ...data, kind: 'dice' })
+  if (activeTab.value !== 'messages') unreadMessages.value++
+}
 const handleHpConfirmed = (data) => {
   currentHp.value = data.newHp
   pendingHp.value = data.newHp
@@ -110,11 +182,12 @@ const handleConcentrationConfirmed = (data) => {
   isConcentrating.value = data.isConcentrating
 }
 const handleConcentrationWarning = (data) => {
-  concentrationWarning.value = data
+  concentrationModal.value = data
 }
 const handleVoteStarted = (voteData) => {
   activeVote.value = { ...voteData, isClosed: false }
   myVote.value = null
+  hasNewVote.value = true
 }
 const handleVoteClosed = (voteData) => {
   activeVote.value = { ...voteData, isClosed: true }
@@ -123,66 +196,55 @@ const handleVoteSubmitted = (data) => {
   myVote.value = data.optionIndex
 }
 
-// Merchant
-const activeMerchant = ref(sessionStore.activeMerchant || null)
-const purchaseStateByItem = ref({}) // itemId -> 'idle'|'pending'
-const purchaseNotifications = ref([]) // { id, message, type }
-const counterOffers = ref([]) // { requestId, action, finalPrice, itemName }
-
-function buyItem(itemId) {
-  if (purchaseStateByItem.value[itemId] === 'pending') return
-  purchaseStateByItem.value[itemId] = 'pending'
-  const socket = getSocket()
-  socket.emit('request-purchase', { itemId, quantity: 1 })
+const handleMerchantShown = (data) => {
+  activeMerchant.value = data
+  cart.value = {}
+  cartSending.value = false
+}
+const handleMerchantClosed = () => {
+  activeMerchant.value = null
+  cart.value = {}
+  cartSending.value = false
+  if (activeTab.value === 'boutique') activeTab.value = 'statut'
+}
+const handleMerchantItemsUpdated = (data) => {
+  activeMerchant.value = data
 }
 
-function respondCounterOffer(requestId, accept) {
-  const socket = getSocket()
-  socket.emit('respond-counter-offer', { requestId, accept })
-  counterOffers.value = counterOffers.value.filter(c => c.requestId !== requestId)
+const handlePurchaseRequested = () => {
+  // cart stays until confirmed
 }
-
-function addNotification(message, type = 'info') {
-  const id = Date.now()
-  purchaseNotifications.value.push({ id, message, type })
-  setTimeout(() => {
-    purchaseNotifications.value = purchaseNotifications.value.filter(n => n.id !== id)
-  }, 5000)
+const handleBatchAccepted = ({ items, totalPrice }) => {
+  cartSending.value = false
+  cart.value = {}
+  purchaseResultModal.value = { type: 'accepted', items, totalPrice }
 }
-
-const handleMerchantShown = (data) => { activeMerchant.value = data }
-const handleMerchantItemsUpdated = (data) => { activeMerchant.value = data }
-function clearPendingPurchases() {
-  Object.keys(purchaseStateByItem.value).forEach(k => {
-    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
-  })
-}
-
-const handlePurchaseRequested = ({ itemId }) => {
-  // state stays 'pending' until confirmed
-}
-const handlePurchaseAccepted = ({ itemName, finalPrice }) => {
-  clearPendingPurchases()
-  addNotification(`✅ Achat accepté : ${itemName} (${finalPrice} po)`, 'success')
-}
-const handlePurchaseRejected = ({ itemName }) => {
-  clearPendingPurchases()
-  addNotification(`❌ Achat refusé : ${itemName}`, 'error')
+const handleBatchRejected = ({ items }) => {
+  cartSending.value = false
+  cart.value = {}
+  purchaseResultModal.value = { type: 'rejected', items }
 }
 const handlePurchaseCounterOffer = (data) => {
-  clearPendingPurchases()
+  cartSending.value = false
   counterOffers.value.push(data)
 }
 const handleCounterOfferResult = ({ accepted, itemName, finalPrice }) => {
   if (accepted) {
-    addNotification(`✅ Contre-offre acceptée : ${itemName} (${finalPrice} po)`, 'success')
+    purchaseResultModal.value = { type: 'accepted', items: [{ item_name: itemName, quantity: 1, total_price: finalPrice }], totalPrice: finalPrice }
   } else {
-    addNotification(`↩️ Contre-offre déclinée : ${itemName}`, 'info')
+    purchaseResultModal.value = { type: 'rejected', items: [{ item_name: itemName, quantity: 1, total_price: 0 }] }
   }
 }
 const handlePurchaseError = ({ message }) => {
-  clearPendingPurchases()
-  addNotification(`⚠️ ${message}`, 'error')
+  cartSending.value = false
+  purchaseResultModal.value = { type: 'error', message }
+}
+
+function handleBeforeUnload() {
+  const socket = getSocket()
+  if (socket && sessionStore.activeSession) {
+    socket.emit('leave-session')
+  }
 }
 
 onMounted(() => {
@@ -197,18 +259,21 @@ onMounted(() => {
   socket.on('vote-closed', handleVoteClosed)
   socket.on('vote-submitted', handleVoteSubmitted)
   socket.on('merchant-shown', handleMerchantShown)
+  socket.on('merchant-closed', handleMerchantClosed)
   socket.on('merchant-items-updated', handleMerchantItemsUpdated)
   socket.on('purchase-requested', handlePurchaseRequested)
-  socket.on('purchase-accepted', handlePurchaseAccepted)
-  socket.on('purchase-rejected', handlePurchaseRejected)
+  socket.on('batch-accepted', handleBatchAccepted)
+  socket.on('batch-rejected', handleBatchRejected)
   socket.on('purchase-counter-offer', handlePurchaseCounterOffer)
   socket.on('counter-offer-result', handleCounterOfferResult)
   socket.on('purchase-error', handlePurchaseError)
+  window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
 onUnmounted(() => {
   const socket = getSocket()
   if (socket) {
+    if (sessionStore.activeSession) socket.emit('leave-session')
     socket.off('new-message', handleNewMessage)
     socket.off('dice-result', handleDiceResult)
     socket.off('hp-update-confirmed', handleHpConfirmed)
@@ -218,640 +283,913 @@ onUnmounted(() => {
     socket.off('vote-closed', handleVoteClosed)
     socket.off('vote-submitted', handleVoteSubmitted)
     socket.off('merchant-shown', handleMerchantShown)
+    socket.off('merchant-closed', handleMerchantClosed)
     socket.off('merchant-items-updated', handleMerchantItemsUpdated)
     socket.off('purchase-requested', handlePurchaseRequested)
-    socket.off('purchase-accepted', handlePurchaseAccepted)
-    socket.off('purchase-rejected', handlePurchaseRejected)
+    socket.off('batch-accepted', handleBatchAccepted)
+    socket.off('batch-rejected', handleBatchRejected)
     socket.off('purchase-counter-offer', handlePurchaseCounterOffer)
     socket.off('counter-offer-result', handleCounterOfferResult)
     socket.off('purchase-error', handlePurchaseError)
   }
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 </script>
 
 <template>
   <div class="inbox-wrapper">
-    <header class="inbox-header">
-      <div class="header-top">
-        <div class="player-info">
-          <div class="player-avatar-wrap">
-            <img
-              v-if="playerInfo?.avatarUrl"
-              :src="playerInfo.avatarUrl.startsWith('/uploads/') ? BACKEND_URL + playerInfo.avatarUrl : playerInfo.avatarUrl"
-              :alt="playerInfo?.name"
-              class="player-avatar"
-            />
-            <span v-else class="player-icon">⚔️</span>
-          </div>
-          <div>
-            <p class="player-name">{{ playerInfo?.name || 'Aventurier' }}</p>
-            <p v-if="playerInfo?.dndClass" class="player-class">{{ playerInfo.dndClass }}</p>
-            <p class="session-name">{{ sessionName }}</p>
-          </div>
+
+    <!-- ── Concentration modal ───────────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="concentrationModal" class="modal-overlay" @click.self="dismissConcentrationModal">
+        <div class="modal-box concentration-modal">
+          <div class="modal-icon">🎯</div>
+          <h2 class="modal-title">Jet de Concentration !</h2>
+          <p class="modal-body">
+            Vous avez subi <strong>{{ concentrationModal.damage }} dégâts</strong>.
+          </p>
+          <p class="modal-body">
+            Effectuez un jet de <strong>Constitution</strong> de difficulté
+            <span class="dc-badge">DD {{ concentrationModal.dc }}</span>
+          </p>
+          <p class="modal-hint">Si vous échouez, votre concentration est brisée.</p>
+          <button class="modal-close-btn" @click="dismissConcentrationModal">J'ai compris</button>
         </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Purchase result modal ─────────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="purchaseResultModal" class="modal-overlay" @click.self="dismissPurchaseModal">
+        <div class="modal-box purchase-modal" :class="purchaseResultModal.type">
+          <div class="modal-icon">
+            {{ purchaseResultModal.type === 'accepted' ? '✅' : purchaseResultModal.type === 'rejected' ? '❌' : '⚠️' }}
+          </div>
+          <h2 class="modal-title">
+            {{ purchaseResultModal.type === 'accepted' ? 'Achat accepté !' : purchaseResultModal.type === 'rejected' ? 'Achat refusé' : 'Erreur' }}
+          </h2>
+          <div v-if="purchaseResultModal.items" class="purchase-modal-items">
+            <div v-for="(item, i) in purchaseResultModal.items" :key="i" class="purchase-modal-item">
+              <span class="pmi-name">{{ item.item_name }}</span>
+              <span class="pmi-qty">× {{ item.quantity }}</span>
+              <span v-if="purchaseResultModal.type === 'accepted'" class="pmi-price">{{ item.total_price }} po</span>
+            </div>
+          </div>
+          <p v-if="purchaseResultModal.type === 'accepted' && purchaseResultModal.totalPrice" class="purchase-modal-total">
+            Total : <strong>{{ purchaseResultModal.totalPrice }} po</strong>
+          </p>
+          <p v-if="purchaseResultModal.message" class="modal-body">{{ purchaseResultModal.message }}</p>
+          <button class="modal-close-btn" @click="dismissPurchaseModal">Fermer</button>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Fixed header ─────────────────────────────────────────────────── -->
+    <header class="inbox-header">
+      <div class="header-left">
+        <div class="player-avatar-wrap">
+          <img
+            v-if="playerInfo?.avatarUrl"
+            :src="playerInfo.avatarUrl.startsWith('/uploads/') ? BACKEND_URL + playerInfo.avatarUrl : playerInfo.avatarUrl"
+            :alt="playerInfo?.name"
+            class="player-avatar"
+          />
+          <span v-else class="player-icon">⚔️</span>
+        </div>
+        <div class="header-info">
+          <p class="player-name">{{ playerInfo?.name || 'Aventurier' }}</p>
+          <p class="session-name">{{ sessionName }}</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="ac-chip">🛡️ {{ playerInfo?.ac ?? 10 }}</span>
         <button class="leave-btn" @click="leaveSession">Quitter</button>
       </div>
+    </header>
 
-      <!-- HP Panel -->
-      <div class="hp-panel">
-        <div class="hp-header-row">
-          <span class="hp-label">❤️ Points de Vie</span>
-          <span class="ac-badge">🛡️ CA {{ playerInfo?.ac ?? 10 }}</span>
-        </div>
-        <div class="hp-bar-track">
-          <div class="hp-bar-fill" :style="{ width: hpPercent + '%', background: hpBarColor }" />
-        </div>
-        <div class="hp-controls">
-          <button class="hp-btn minus" @click="adjustHp(-1)">−</button>
-          <div class="hp-value-wrap">
+    <!-- ── Scrollable content ────────────────────────────────────────────── -->
+    <main class="inbox-content">
+
+      <!-- ── STATUT tab ───────────────────────────────────────────────── -->
+      <div v-show="activeTab === 'statut'" class="tab-panel">
+        <!-- HP Panel -->
+        <div class="panel hp-panel">
+          <div class="panel-header">
+            <span class="panel-label">❤️ Points de Vie</span>
+            <span class="hp-fraction">{{ currentHp }} / {{ maxHp }}</span>
+          </div>
+          <div class="hp-bar-track">
+            <div class="hp-bar-fill" :style="{ width: hpPercent + '%', background: hpBarColor }" />
+          </div>
+          <div class="hp-controls">
+            <button class="hp-btn minus" @click="adjustHp(-5)">−5</button>
+            <button class="hp-btn minus" @click="adjustHp(-1)">−1</button>
             <input
               v-model.number="pendingHp"
               type="number"
               class="hp-input"
               :min="0" :max="maxHp"
             />
-            <span class="hp-max">/ {{ maxHp }}</span>
+            <button class="hp-btn plus" @click="adjustHp(1)">+1</button>
+            <button class="hp-btn plus" @click="adjustHp(5)">+5</button>
           </div>
-          <button class="hp-btn plus" @click="adjustHp(1)">+</button>
           <button
             class="hp-send-btn"
             :class="{ sent: hpSent }"
             :disabled="hpSending || pendingHp === currentHp"
             @click="sendHpUpdate"
           >
-            {{ hpSent ? '✓ Envoyé' : hpSending ? '…' : '📡 Mettre à jour' }}
+            {{ hpSent ? '✓ Mis à jour' : hpSending ? '…' : '📡 Confirmer les PV' }}
           </button>
         </div>
-      </div>
 
-      <!-- Concentration Toggle -->
-      <div class="concentration-panel">
-        <button
-          class="concentration-btn"
-          :class="{ active: isConcentrating }"
-          @click="toggleConcentration"
-        >
-          <span class="concentration-icon">🎯</span>
-          <span>{{ isConcentrating ? 'Concentration active' : 'Se concentrer' }}</span>
-        </button>
-      </div>
-
-      <!-- Concentration Warning Banner -->
-      <div v-if="concentrationWarning" class="concentration-warning">
-        <div class="warning-content">
-          <p class="warning-title">⚠️ Jet de concentration requis !</p>
-          <p class="warning-desc">DD {{ concentrationWarning.dc }} ({{ concentrationWarning.damage }} dégâts subis)</p>
-        </div>
-        <button class="warning-dismiss" @click="concentrationWarning = null">✕</button>
-      </div>
-
-      <!-- Conditions Panel -->
-      <div class="conditions-panel">
-        <span class="conditions-label">⚡ Conditions</span>
-        <div class="conditions-grid">
+        <!-- Concentration -->
+        <div class="panel">
           <button
-            v-for="cond in DND_CONDITIONS"
-            :key="cond.id"
-            class="condition-btn"
-            :class="{ active: activeConditions.includes(cond.id) }"
-            @click="toggleCondition(cond.id)"
+            class="concentration-btn"
+            :class="{ active: isConcentrating }"
+            @click="toggleConcentration"
           >
-            <span class="cond-icon">{{ cond.icon }}</span>
-            <span class="cond-label">{{ cond.label }}</span>
+            <span class="concentration-icon">🎯</span>
+            <div class="concentration-text">
+              <span class="conc-label">Concentration</span>
+              <span class="conc-state">{{ isConcentrating ? 'Active' : 'Inactive' }}</span>
+            </div>
+            <span class="conc-toggle">{{ isConcentrating ? 'Arrêter' : 'Activer' }}</span>
           </button>
         </div>
-      </div>
-    </header>
 
-    <!-- Vote Panel -->
-    <div v-if="activeVote" class="vote-panel">
-      <h3 class="vote-title">🗳️ Vote : {{ activeVote.question }}</h3>
-      <div v-if="myVote === null && !activeVote.isClosed" class="vote-options">
-        <button
-          v-for="(opt, i) in activeVote.options"
-          :key="i"
-          class="vote-option-btn"
-          @click="submitVote(i)"
-        >{{ opt }}</button>
-      </div>
-      <div v-else-if="myVote !== null && !activeVote.isClosed" class="vote-done">
-        <p>✓ Vous avez voté pour : <strong>{{ activeVote.options[myVote] }}</strong></p>
-      </div>
-      <div v-if="activeVote.isClosed" class="vote-results-mini">
-        <p class="vote-closed-label">Vote clôturé — Résultats :</p>
-        <p v-for="(opt, i) in activeVote.options" :key="i" class="vote-result-line">
-          {{ opt }}: <strong>{{ activeVote.results[i] }}</strong> vote(s)
-        </p>
-      </div>
-    </div>
-
-    <!-- Merchant Panel -->
-    <div v-if="activeMerchant" class="merchant-panel">
-      <h3 class="merchant-title">🏪 {{ activeMerchant.name }}</h3>
-      <p v-if="activeMerchant.description" class="merchant-desc">{{ activeMerchant.description }}</p>
-
-      <!-- Counter offers -->
-      <div v-for="offer in counterOffers" :key="offer.requestId" class="counter-offer">
-        <p class="offer-text">
-          <span v-if="offer.action === 'discount'">💚 Ristourne proposée</span>
-          <span v-else>📈 Nouveau prix proposé</span>
-          pour <strong>{{ offer.itemName }}</strong> :
-          <strong class="offer-price">{{ offer.finalPrice }} po</strong>
-        </p>
-        <div class="offer-actions">
-          <button class="offer-btn accept" @click="respondCounterOffer(offer.requestId, true)">Accepter</button>
-          <button class="offer-btn decline" @click="respondCounterOffer(offer.requestId, false)">Décliner</button>
+        <!-- Counter offers -->
+        <div v-if="counterOffers.length > 0" class="panel counter-offers-panel">
+          <p class="panel-label">🔄 Contre-offres</p>
+          <div v-for="offer in counterOffers" :key="offer.requestId" class="counter-offer">
+            <p class="offer-text">
+              <span v-if="offer.action === 'discount'">💚 Ristourne</span>
+              <span v-else>📈 Augmentation</span>
+              pour <strong>{{ offer.itemName }}</strong> :
+              <strong class="offer-price">{{ offer.finalPrice }} po</strong>
+            </p>
+            <div class="offer-actions">
+              <button class="offer-btn accept" @click="respondCounterOffer(offer.requestId, true)">Accepter</button>
+              <button class="offer-btn decline" @click="respondCounterOffer(offer.requestId, false)">Décliner</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Purchase notifications -->
-      <div v-for="notif in purchaseNotifications" :key="notif.id" class="purchase-notif" :class="notif.type">
-        {{ notif.message }}
-      </div>
-
-      <!-- Items grouped by category -->
-      <div class="shop-items">
-        <div
-          v-for="item in activeMerchant.items"
-          :key="item.id"
-          class="shop-item"
-          :class="{ 'out-of-stock': item.stock === 0 }"
-        >
-          <div class="shop-item-info">
-            <span class="shop-item-cat">{{ item.category }}</span>
-            <span class="shop-item-name">{{ item.name }}</span>
-            <p v-if="item.description" class="shop-item-desc">{{ item.description }}</p>
-          </div>
-          <div class="shop-item-right">
-            <span class="shop-item-price">{{ item.price }} po</span>
-            <span v-if="item.stock !== -1 && item.stock !== 0" class="shop-item-stock">×{{ item.stock }}</span>
-            <span v-else-if="item.stock === 0" class="shop-item-stock empty">Épuisé</span>
+      <!-- ── CONDITIONS tab ───────────────────────────────────────────── -->
+      <div v-show="activeTab === 'conditions'" class="tab-panel">
+        <div class="panel">
+          <p class="panel-label">⚡ États et Conditions</p>
+          <div class="conditions-grid">
             <button
-              v-if="item.stock !== 0"
-              class="buy-btn"
-              :disabled="purchaseStateByItem[item.id] === 'pending'"
-              @click="buyItem(item.id)"
+              v-for="cond in DND_CONDITIONS"
+              :key="cond.id"
+              class="condition-btn"
+              :class="{ active: activeConditions.includes(cond.id) }"
+              @click="toggleCondition(cond.id)"
             >
-              {{ purchaseStateByItem[item.id] === 'pending' ? '…' : 'Acheter' }}
+              <span class="cond-icon">{{ cond.icon }}</span>
+              <span class="cond-label">{{ cond.label }}</span>
             </button>
           </div>
         </div>
       </div>
-    </div>
 
-    <main class="inbox-main">
-      <div v-if="messages.length === 0" class="inbox-empty">
-        <p class="empty-icon">📜</p>
-        <p class="empty-text">En attente de messages du MJ…</p>
-        <p class="empty-sub">Restez vigilant, aventurier.</p>
+      <!-- ── BOUTIQUE tab ─────────────────────────────────────────────── -->
+      <div v-show="activeTab === 'boutique'" class="tab-panel">
+        <div v-if="!activeMerchant" class="panel empty-panel">
+          <p class="empty-icon">🏪</p>
+          <p class="empty-text">Aucun marchand ouvert pour l'instant.</p>
+        </div>
+        <template v-else>
+          <div class="panel merchant-header-panel">
+            <h2 class="merchant-name">🏪 {{ activeMerchant.name }}</h2>
+            <p v-if="activeMerchant.description" class="merchant-desc">{{ activeMerchant.description }}</p>
+          </div>
+
+          <!-- Items grouped by category -->
+          <div class="panel shop-panel">
+            <div
+              v-for="item in activeMerchant.items"
+              :key="item.id"
+              class="shop-item"
+              :class="{ 'out-of-stock': item.stock === 0 }"
+            >
+              <div class="shop-item-info">
+                <span class="shop-item-cat">{{ item.category }}</span>
+                <span class="shop-item-name">{{ item.name }}</span>
+                <p v-if="item.description" class="shop-item-desc">{{ item.description }}</p>
+              </div>
+              <div class="shop-item-right">
+                <span class="shop-item-price">{{ item.price }} po</span>
+                <span v-if="item.stock === -1" class="shop-item-stock">∞</span>
+                <span v-else-if="item.stock === 0" class="shop-item-stock empty">Épuisé</span>
+                <span v-else class="shop-item-stock">×{{ item.stock }}</span>
+                <div v-if="item.stock !== 0" class="qty-controls">
+                  <button class="qty-btn" @click="setCartQty(item.id, (cart[item.id] || 0) - 1)">−</button>
+                  <span class="qty-value">{{ cart[item.id] || 0 }}</span>
+                  <button class="qty-btn" @click="setCartQty(item.id, (cart[item.id] || 0) + 1)">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cart summary + submit -->
+          <div class="panel cart-panel" :class="{ 'cart-active': cartItemCount > 0 }">
+            <div class="cart-summary">
+              <span class="cart-label">🛒 Panier : {{ cartItemCount }} article(s)</span>
+              <span class="cart-total">{{ cartTotal }} po</span>
+            </div>
+            <div class="cart-actions">
+              <button
+                class="cart-submit-btn"
+                :disabled="cartItemCount === 0 || cartSending"
+                @click="submitCart"
+              >
+                {{ cartSending ? '…' : '📨 Envoyer la demande' }}
+              </button>
+              <button
+                v-if="cartItemCount > 0"
+                class="cart-clear-btn"
+                @click="clearCart"
+              >Vider</button>
+            </div>
+          </div>
+        </template>
       </div>
-      <div v-else class="messages-list">
-        <MessageCard v-for="(msg, idx) in messages" :key="idx" :message="msg" />
+
+      <!-- ── VOTE tab ─────────────────────────────────────────────────── -->
+      <div v-show="activeTab === 'vote'" class="tab-panel">
+        <div v-if="!activeVote" class="panel empty-panel">
+          <p class="empty-icon">🗳️</p>
+          <p class="empty-text">Aucun vote en cours.</p>
+        </div>
+        <div v-else class="panel vote-panel">
+          <h3 class="vote-title">🗳️ {{ activeVote.question }}</h3>
+          <div v-if="myVote === null && !activeVote.isClosed" class="vote-options">
+            <button
+              v-for="(opt, i) in activeVote.options"
+              :key="i"
+              class="vote-option-btn"
+              @click="submitVote(i)"
+            >{{ opt }}</button>
+          </div>
+          <div v-else-if="myVote !== null && !activeVote.isClosed" class="vote-done">
+            <p>✓ Vous avez voté pour : <strong>{{ activeVote.options[myVote] }}</strong></p>
+          </div>
+          <div v-if="activeVote.isClosed" class="vote-results-mini">
+            <p class="vote-closed-label">Vote clôturé — Résultats :</p>
+            <p v-for="(opt, i) in activeVote.options" :key="i" class="vote-result-line">
+              {{ opt }}: <strong>{{ activeVote.results[i] }}</strong> vote(s)
+            </p>
+          </div>
+        </div>
       </div>
+
+      <!-- ── MESSAGES tab ─────────────────────────────────────────────── -->
+      <div v-show="activeTab === 'messages'" class="tab-panel">
+        <div v-if="messages.length === 0" class="panel empty-panel">
+          <p class="empty-icon">📜</p>
+          <p class="empty-text">En attente de messages…</p>
+          <p class="empty-sub">Restez vigilant, aventurier.</p>
+        </div>
+        <div v-else class="messages-list">
+          <MessageCard v-for="(msg, idx) in messages" :key="idx" :message="msg" />
+        </div>
+      </div>
+
     </main>
+
+    <!-- ── Bottom tab bar ────────────────────────────────────────────────── -->
+    <nav class="tab-bar">
+      <button
+        class="tab-item"
+        :class="{ active: activeTab === 'statut' }"
+        @click="switchTab('statut')"
+      >
+        <span class="tab-icon">❤️</span>
+        <span class="tab-label">Statut</span>
+      </button>
+      <button
+        class="tab-item"
+        :class="{ active: activeTab === 'conditions' }"
+        @click="switchTab('conditions')"
+      >
+        <span class="tab-icon">⚡</span>
+        <span class="tab-label">États</span>
+        <span v-if="activeConditions.length > 0" class="tab-badge">{{ activeConditions.length }}</span>
+      </button>
+      <button
+        class="tab-item"
+        :class="{ active: activeTab === 'boutique', disabled: !activeMerchant }"
+        :disabled="!activeMerchant"
+        @click="switchTab('boutique')"
+      >
+        <span class="tab-icon">🏪</span>
+        <span class="tab-label">Boutique</span>
+        <span v-if="cartItemCount > 0" class="tab-badge">{{ cartItemCount }}</span>
+      </button>
+      <button
+        class="tab-item"
+        :class="{ active: activeTab === 'vote' }"
+        @click="switchTab('vote'); hasNewVote = false"
+      >
+        <span class="tab-icon">🗳️</span>
+        <span class="tab-label">Vote</span>
+        <span v-if="hasNewVote && activeTab !== 'vote'" class="tab-badge pulse">!</span>
+      </button>
+      <button
+        class="tab-item"
+        :class="{ active: activeTab === 'messages' }"
+        @click="switchTab('messages')"
+      >
+        <span class="tab-icon">📜</span>
+        <span class="tab-label">Messages</span>
+        <span v-if="unreadMessages > 0" class="tab-badge">{{ unreadMessages }}</span>
+      </button>
+    </nav>
+
   </div>
 </template>
 
 <style scoped>
-.inbox-wrapper { display: flex; flex-direction: column; min-height: 100vh; }
-
-.inbox-header {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--color-border);
-  background: linear-gradient(180deg, #1a0f05 0%, transparent 100%);
+/* ── Layout ──────────────────────────────────────────────────────────── */
+.inbox-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--color-bg, #0a0802);
 }
 
-.header-top { display: flex; align-items: center; justify-content: space-between; }
-
-.player-info { display: flex; align-items: center; gap: 0.75rem; }
-.player-icon { font-size: 1.5rem; }
-.player-avatar-wrap {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 2px solid var(--color-gold-dark);
-  flex-shrink: 0;
-  background: rgba(255,255,255,0.07);
+/* ── Header ──────────────────────────────────────────────────────────── */
+.inbox-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(180deg, #1a0f05 0%, #100a04 100%);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  gap: 0.75rem;
+}
+.header-left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.header-right { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+
+.player-avatar-wrap {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 2px solid var(--color-gold-dark);
+  overflow: hidden;
+  background: rgba(255,255,255,0.07);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
 .player-avatar { width: 100%; height: 100%; object-fit: cover; }
-.player-name { font-family: var(--font-heading); font-size: 1rem; color: var(--color-parchment); letter-spacing: 0.05em; }
-.player-class {
+.player-icon { font-size: 1.2rem; }
+
+.header-info { min-width: 0; }
+.player-name {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  color: var(--color-parchment);
+  letter-spacing: 0.03em;
+  margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-name {
   font-family: var(--font-heading);
   font-size: 0.6rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--color-gold-dark);
-  background: rgba(180,120,20,0.15);
-  border: 1px solid rgba(180,120,20,0.4);
-  border-radius: 20px;
-  padding: 0.1rem 0.45rem;
-  display: inline-block;
-  margin: 0.1rem 0;
+  color: var(--color-text-dim);
+  margin: 0;
 }
-.session-name { font-family: var(--font-heading); font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--color-text-dim); }
 
+.ac-chip {
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: #89c4ff;
+  background: rgba(137,196,255,0.1);
+  border: 1px solid rgba(137,196,255,0.3);
+  border-radius: 20px;
+  padding: 0.2rem 0.6rem;
+  white-space: nowrap;
+}
 .leave-btn {
-  background: none; border: 1px solid var(--color-border); border-radius: 6px;
-  padding: 0.4rem 0.75rem; color: var(--color-text-dim); font-family: var(--font-heading);
-  font-size: 0.7rem; letter-spacing: 0.1em; cursor: pointer; text-transform: uppercase; transition: all 0.2s;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  white-space: nowrap;
 }
 .leave-btn:hover { border-color: var(--color-red); color: #ff6b6b; }
 
-/* HP Panel */
-.hp-panel {
-  background: linear-gradient(160deg, #1e130a, #150e06);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.9rem 1rem;
+/* ── Scrollable content ──────────────────────────────────────────────── */
+.inbox-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+.tab-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-}
-.hp-header-row { display: flex; justify-content: space-between; align-items: center; }
-.hp-label { font-family: var(--font-heading); font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--color-text-dim); }
-.ac-badge {
-  font-family: var(--font-heading); font-size: 0.7rem; letter-spacing: 0.1em;
-  color: #89c4ff; background: rgba(137,196,255,0.1); border: 1px solid rgba(137,196,255,0.35);
-  border-radius: 20px; padding: 0.15rem 0.6rem;
+  gap: 0.75rem;
 }
 
-.hp-bar-track { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
-.hp-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease, background 0.4s ease; }
+/* ── Panel cards ─────────────────────────────────────────────────────── */
+.panel {
+  background: linear-gradient(160deg, #1e1408, #150e06);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+.panel-label {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin: 0 0 0.75rem;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
 
-.hp-controls { display: flex; align-items: center; gap: 0.5rem; }
+/* ── HP Panel ────────────────────────────────────────────────────────── */
+.hp-panel { display: flex; flex-direction: column; gap: 0.6rem; }
+.hp-fraction {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  color: var(--color-parchment);
+  letter-spacing: 0.05em;
+}
+.hp-bar-track { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
+.hp-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease, background 0.4s ease; }
+.hp-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
 .hp-btn {
-  width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.05); color: var(--color-parchment); font-size: 1.2rem;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s; line-height: 1;
+  flex: 1;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.05);
+  color: var(--color-parchment);
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s;
 }
-.hp-btn.minus:hover { border-color: #e03030; color: #e03030; }
-.hp-btn.plus:hover { border-color: #2fb896; color: #2fb896; }
-
-.hp-value-wrap { display: flex; align-items: baseline; gap: 0.25rem; flex: 1; justify-content: center; }
+.hp-btn.minus:hover { border-color: #e03030; color: #e03030; background: rgba(224,48,48,0.1); }
+.hp-btn.plus:hover { border-color: #2fb896; color: #2fb896; background: rgba(47,184,150,0.1); }
 .hp-input {
-  width: 56px; text-align: center; background: transparent; border: none; outline: none;
-  font-family: var(--font-heading); font-size: 1.4rem; font-weight: 700; color: var(--color-parchment);
+  flex: 2;
+  height: 40px;
+  text-align: center;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-parchment);
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 700;
+  outline: none;
 }
-.hp-max { font-family: var(--font-heading); font-size: 0.9rem; color: var(--color-text-dim); }
-
+.hp-input:focus { border-color: var(--color-gold-dark); }
 .hp-send-btn {
-  padding: 0.3rem 0.8rem; border-radius: 6px; border: 1px solid var(--color-gold-dark);
-  background: rgba(180,120,20,0.15); color: var(--color-gold); font-family: var(--font-heading);
-  font-size: 0.65rem; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer;
-  transition: all 0.2s; white-space: nowrap;
+  width: 100%;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-gold-dark);
+  background: rgba(180,120,20,0.15);
+  color: var(--color-gold);
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 .hp-send-btn:hover:not(:disabled) { background: rgba(180,120,20,0.3); }
 .hp-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .hp-send-btn.sent { border-color: #2fb896; background: rgba(47,184,150,0.15); color: #2fb896; }
 
-/* Concentration */
-.concentration-panel {
-  display: flex;
-}
+/* ── Concentration ───────────────────────────────────────────────────── */
 .concentration-btn {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
   border: 1px solid var(--color-border);
   background: rgba(255,255,255,0.03);
   color: var(--color-text-dim);
   font-family: var(--font-heading);
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.concentration-btn:hover {
-  border-color: #7b5ea7;
-  color: #b89ee8;
-}
-.concentration-btn.active {
-  border-color: #7b5ea7;
-  background: rgba(123,94,167,0.2);
-  color: #b89ee8;
-  box-shadow: 0 0 10px rgba(123,94,167,0.3);
-}
-.concentration-icon { font-size: 1rem; }
-
-/* Concentration Warning */
-.concentration-warning {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  background: rgba(123,94,167,0.15);
-  border: 1px solid #7b5ea7;
-  border-radius: 10px;
-  animation: pulseWarning 2s ease-in-out infinite;
-}
-@keyframes pulseWarning {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(123,94,167,0.4); }
-  50% { box-shadow: 0 0 12px 4px rgba(123,94,167,0.3); }
-}
-.warning-content { flex: 1; }
-.warning-title {
-  font-family: var(--font-heading);
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #b89ee8;
-  letter-spacing: 0.05em;
-  margin: 0 0 0.25rem;
-}
-.warning-desc {
-  font-family: var(--font-body);
-  font-size: 0.8rem;
-  color: var(--color-text-dim);
-  margin: 0;
-}
-.warning-dismiss {
-  background: none;
-  border: 1px solid rgba(123,94,167,0.5);
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #b89ee8;
-  cursor: pointer;
-  font-size: 0.75rem;
-  flex-shrink: 0;
-  transition: all 0.2s;
-}
-.warning-dismiss:hover { background: rgba(123,94,167,0.2); }
-
-.inbox-main { flex: 1; padding: 1.5rem; }
-.inbox-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; gap: 0.75rem; }
-.empty-icon { font-size: 3rem; opacity: 0.5; }
-.empty-text { font-family: var(--font-heading); font-size: 1rem; letter-spacing: 0.1em; color: var(--color-text-dim); text-align: center; }
-.empty-sub { font-family: var(--font-body); color: var(--color-border); font-size: 0.9rem; }
-.messages-list { display: flex; flex-direction: column; gap: 1rem; }
-
-/* Conditions Panel */
-.conditions-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.conditions-label {
-  font-family: var(--font-heading);
-  font-size: 0.7rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
-}
-
-.conditions-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.condition-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.55rem;
-  border-radius: 20px;
-  border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.03);
-  color: var(--color-text-dim);
-  font-family: var(--font-heading);
-  font-size: 0.65rem;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.condition-btn:hover {
-  border-color: #f0a500;
-  color: #f0a500;
-}
-
-.condition-btn.active {
-  border-color: #e03030;
-  background: rgba(224,48,48,0.15);
-  color: #ff6060;
-}
-
-.cond-icon { font-size: 0.85rem; }
-.cond-label { white-space: nowrap; }
-
-/* Vote Panel */
-.vote-panel {
-  margin: 0 1.5rem;
-  padding: 1rem;
-  background: linear-gradient(160deg, #0e1a2a, #091220);
-  border: 1px solid rgba(137,196,255,0.25);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-.vote-title {
-  font-family: var(--font-heading);
-  font-size: 0.9rem;
-  color: #89c4ff;
-  letter-spacing: 0.05em;
-  margin: 0;
-}
-.vote-options {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.vote-option-btn {
-  padding: 0.6rem 1rem;
-  background: rgba(137,196,255,0.08);
-  border: 1px solid rgba(137,196,255,0.3);
-  border-radius: 8px;
-  color: var(--color-parchment);
-  font-family: var(--font-heading);
-  font-size: 0.8rem;
-  letter-spacing: 0.05em;
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
 }
-.vote-option-btn:hover {
-  background: rgba(137,196,255,0.18);
-  border-color: #89c4ff;
-  color: #89c4ff;
+.concentration-btn.active {
+  border-color: #7b5ea7;
+  background: rgba(123,94,167,0.15);
+  box-shadow: 0 0 12px rgba(123,94,167,0.2);
 }
-.vote-done {
-  font-family: var(--font-body);
-  font-size: 0.85rem;
-  color: #2fb896;
-}
-.vote-done strong { color: var(--color-parchment); }
-.vote-closed-label {
-  font-family: var(--font-heading);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.concentration-icon { font-size: 1.3rem; flex-shrink: 0; }
+.concentration-text { flex: 1; }
+.conc-label { display: block; font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.conc-state {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
   color: var(--color-text-dim);
-  margin: 0 0 0.25rem;
+  margin-top: 0.1rem;
 }
-.vote-result-line {
-  font-family: var(--font-body);
-  font-size: 0.8rem;
+.concentration-btn.active .conc-state { color: #b89ee8; }
+.conc-toggle {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
   color: var(--color-text-dim);
-  margin: 0;
+  flex-shrink: 0;
 }
-.vote-result-line strong { color: var(--color-parchment); }
+.concentration-btn.active .conc-toggle { color: #b89ee8; }
 
-/* ── Merchant Panel ────────────────────────────────────────────────────── */
-.merchant-panel {
-  background: linear-gradient(160deg, #1e1e0a, #14140a);
-  border: 1px solid rgba(201,168,76,0.3);
-  border-radius: 12px;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 0 0.5rem;
-}
-.merchant-title {
-  font-family: var(--font-heading);
-  font-size: 0.85rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--color-gold-bright);
-  margin: 0;
-}
-.merchant-desc {
-  font-family: var(--font-body);
-  font-size: 0.8rem;
-  color: var(--color-text-dim);
-  margin: 0;
-}
-
-/* Counter offer */
+/* ── Counter offers ──────────────────────────────────────────────────── */
+.counter-offers-panel { display: flex; flex-direction: column; gap: 0.6rem; }
 .counter-offer {
-  background: linear-gradient(160deg, #1a2a0a, #101808);
-  border: 1px solid rgba(47,184,150,0.4);
+  background: rgba(47,184,150,0.06);
+  border: 1px solid rgba(47,184,150,0.3);
   border-radius: 8px;
-  padding: 0.75rem;
+  padding: 0.65rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
-.offer-text {
-  font-family: var(--font-body);
-  font-size: 0.85rem;
-  color: var(--color-text-dim);
-  margin: 0;
-}
+.offer-text { font-family: var(--font-body); font-size: 0.85rem; color: var(--color-text-dim); margin: 0; }
 .offer-text strong { color: var(--color-parchment); }
 .offer-price { color: #2fb896 !important; }
 .offer-actions { display: flex; gap: 0.5rem; }
 .offer-btn {
-  flex: 1;
-  padding: 0.4rem;
-  border-radius: 6px;
-  font-family: var(--font-heading);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid;
+  flex: 1; padding: 0.45rem;
+  border-radius: 6px; font-family: var(--font-heading); font-size: 0.7rem;
+  letter-spacing: 0.06em; cursor: pointer; transition: all 0.2s; border: 1px solid;
 }
 .offer-btn.accept { background: rgba(47,184,150,0.1); border-color: #2fb896; color: #2fb896; }
 .offer-btn.accept:hover { background: rgba(47,184,150,0.25); }
 .offer-btn.decline { background: rgba(255,107,107,0.1); border-color: #ff6b6b; color: #ff6b6b; }
 .offer-btn.decline:hover { background: rgba(255,107,107,0.2); }
 
-/* Purchase notifications */
-.purchase-notif {
-  font-family: var(--font-body);
-  font-size: 0.85rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  animation: slideIn 0.3s ease;
+/* ── Conditions ──────────────────────────────────────────────────────── */
+.conditions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+.condition-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem 0.4rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.03);
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.purchase-notif.success { background: rgba(47,184,150,0.1); border: 1px solid rgba(47,184,150,0.3); color: #2fb896; }
-.purchase-notif.error { background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.3); color: #ff6b6b; }
-.purchase-notif.info { background: rgba(255,255,255,0.04); border: 1px solid var(--color-border); color: var(--color-text-dim); }
-@keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.condition-btn:hover { border-color: #f0a500; color: #f0a500; }
+.condition-btn.active {
+  border-color: #e03030;
+  background: rgba(224,48,48,0.15);
+  color: #ff6060;
+}
+.cond-icon { font-size: 1.1rem; }
+.cond-label { text-align: center; line-height: 1.2; white-space: nowrap; }
 
-/* Shop items */
-.shop-items { display: flex; flex-direction: column; gap: 0.5rem; }
+/* ── Shop ────────────────────────────────────────────────────────────── */
+.merchant-header-panel { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.75rem 1rem; }
+.merchant-name {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  color: var(--color-gold-bright);
+  margin: 0;
+}
+.merchant-desc { font-family: var(--font-body); font-size: 0.8rem; color: var(--color-text-dim); margin: 0; }
+
+.shop-panel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; }
 .shop-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.65rem 0.75rem;
+  padding: 0.65rem 0.5rem;
   background: rgba(255,255,255,0.03);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  transition: border-color 0.2s;
 }
-.shop-item:not(.out-of-stock):hover { border-color: rgba(201,168,76,0.4); }
 .shop-item.out-of-stock { opacity: 0.45; }
 .shop-item-info { flex: 1; min-width: 0; }
 .shop-item-cat {
   display: block;
   font-family: var(--font-heading);
-  font-size: 0.55rem;
+  font-size: 0.52rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--color-gold-dark);
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.1rem;
 }
-.shop-item-name {
-  font-family: var(--font-heading);
-  font-size: 0.85rem;
+.shop-item-name { font-family: var(--font-heading); font-size: 0.85rem; color: var(--color-parchment); }
+.shop-item-desc { font-family: var(--font-body); font-size: 0.72rem; color: var(--color-text-dim); margin: 0.1rem 0 0; }
+.shop-item-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.shop-item-price { font-family: var(--font-title); font-size: 0.95rem; color: var(--color-gold-bright); }
+.shop-item-stock { font-family: var(--font-heading); font-size: 0.6rem; color: var(--color-text-dim); }
+.shop-item-stock.empty { color: #ff6b6b; }
+
+.qty-controls { display: flex; align-items: center; gap: 0.3rem; }
+.qty-btn {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.05);
   color: var(--color-parchment);
-}
-.shop-item-desc {
-  font-family: var(--font-body);
-  font-size: 0.75rem;
-  color: var(--color-text-dim);
-  margin: 0.15rem 0 0;
-}
-.shop-item-right {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
   flex-shrink: 0;
 }
-.shop-item-price {
-  font-family: var(--font-title);
-  font-size: 1rem;
-  color: var(--color-gold-bright);
-}
-.shop-item-stock {
+.qty-btn:hover { border-color: var(--color-gold-dark); color: var(--color-gold-bright); }
+.qty-value {
   font-family: var(--font-heading);
-  font-size: 0.65rem;
-  color: var(--color-text-dim);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-parchment);
+  min-width: 20px;
+  text-align: center;
 }
-.shop-item-stock.empty { color: #ff6b6b; }
-.buy-btn {
-  padding: 0.35rem 0.7rem;
-  background: rgba(201,168,76,0.1);
+
+.cart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border-color: rgba(201,168,76,0.2);
+}
+.cart-panel.cart-active { border-color: rgba(201,168,76,0.5); background: linear-gradient(160deg, #2a1e08, #1a1206); }
+.cart-summary { display: flex; align-items: center; justify-content: space-between; }
+.cart-label { font-family: var(--font-heading); font-size: 0.75rem; letter-spacing: 0.1em; color: var(--color-text-dim); }
+.cart-total { font-family: var(--font-title); font-size: 1.1rem; color: var(--color-gold-bright); }
+.cart-actions { display: flex; gap: 0.5rem; }
+.cart-submit-btn {
+  flex: 1;
+  padding: 0.65rem;
+  border-radius: 8px;
   border: 1px solid var(--color-gold-dark);
-  border-radius: 6px;
-  color: var(--color-gold-bright);
+  background: rgba(180,120,20,0.15);
+  color: var(--color-gold);
   font-family: var(--font-heading);
-  font-size: 0.65rem;
+  font-size: 0.8rem;
   letter-spacing: 0.08em;
   cursor: pointer;
   transition: all 0.2s;
-  white-space: nowrap;
 }
-.buy-btn:hover:not(:disabled) { background: rgba(201,168,76,0.25); }
-.buy-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cart-submit-btn:hover:not(:disabled) { background: rgba(180,120,20,0.3); }
+.cart-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cart-clear-btn {
+  padding: 0.65rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.cart-clear-btn:hover { border-color: #cc3030; color: #ff6060; }
+
+/* ── Vote ────────────────────────────────────────────────────────────── */
+.vote-panel { display: flex; flex-direction: column; gap: 0.75rem; }
+.vote-title { font-family: var(--font-heading); font-size: 1rem; color: #89c4ff; letter-spacing: 0.05em; margin: 0; }
+.vote-options { display: flex; flex-direction: column; gap: 0.5rem; }
+.vote-option-btn {
+  padding: 0.7rem 1rem;
+  background: rgba(137,196,255,0.08);
+  border: 1px solid rgba(137,196,255,0.3);
+  border-radius: 8px;
+  color: var(--color-parchment);
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+.vote-option-btn:hover { background: rgba(137,196,255,0.18); border-color: #89c4ff; color: #89c4ff; }
+.vote-done { font-family: var(--font-body); font-size: 0.9rem; color: #2fb896; }
+.vote-done strong { color: var(--color-parchment); }
+.vote-closed-label { font-family: var(--font-heading); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-dim); margin: 0 0 0.25rem; }
+.vote-result-line { font-family: var(--font-body); font-size: 0.85rem; color: var(--color-text-dim); margin: 0.1rem 0; }
+.vote-result-line strong { color: var(--color-parchment); }
+
+/* ── Messages ────────────────────────────────────────────────────────── */
+.messages-list { display: flex; flex-direction: column; gap: 1rem; }
+
+/* ── Empty states ────────────────────────────────────────────────────── */
+.empty-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  gap: 0.5rem;
+  border-style: dashed;
+}
+.empty-icon { font-size: 2.5rem; opacity: 0.4; }
+.empty-text { font-family: var(--font-heading); font-size: 0.9rem; letter-spacing: 0.1em; color: var(--color-text-dim); }
+.empty-sub { font-family: var(--font-body); color: var(--color-border); font-size: 0.8rem; }
+
+/* ── Tab bar ─────────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  background: linear-gradient(0deg, #1a0f05 0%, #100a04 100%);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.6rem 0.25rem;
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  cursor: pointer;
+  transition: color 0.2s;
+  position: relative;
+  min-width: 0;
+}
+.tab-item:hover:not(:disabled) { color: var(--color-parchment); }
+.tab-item.active { color: var(--color-gold-bright); }
+.tab-item.active::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 20%; right: 20%;
+  height: 2px;
+  background: var(--color-gold-dark);
+  border-radius: 0 0 2px 2px;
+}
+.tab-item:disabled { opacity: 0.3; cursor: not-allowed; }
+.tab-icon { font-size: 1.3rem; line-height: 1; }
+.tab-label { font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.tab-badge {
+  position: absolute;
+  top: 4px; right: calc(50% - 16px);
+  min-width: 16px; height: 16px;
+  padding: 0 3px;
+  background: #e03030;
+  border-radius: 8px;
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+}
+.tab-badge.pulse { animation: badgePulse 1.5s ease-in-out infinite; }
+@keyframes badgePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+
+/* ── Modals ──────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+.modal-box {
+  background: linear-gradient(160deg, #2a1e10, #1a1208);
+  border: 1px solid var(--color-gold-dark);
+  border-radius: 16px;
+  padding: 2rem 1.5rem;
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+.modal-icon { font-size: 3rem; line-height: 1; }
+.modal-title {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-gold-bright);
+  margin: 0;
+}
+.modal-body {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--color-text-dim);
+  margin: 0;
+  line-height: 1.5;
+}
+.modal-body strong { color: var(--color-parchment); }
+.modal-hint {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin: 0;
+}
+.dc-badge {
+  display: inline-block;
+  background: rgba(123,94,167,0.2);
+  border: 1px solid #7b5ea7;
+  border-radius: 20px;
+  padding: 0.2rem 0.7rem;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #b89ee8;
+  letter-spacing: 0.05em;
+}
+.modal-close-btn {
+  padding: 0.7rem 2rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-gold-dark);
+  background: rgba(180,120,20,0.15);
+  color: var(--color-gold);
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 0.5rem;
+}
+.modal-close-btn:hover { background: rgba(180,120,20,0.3); }
+
+/* Concentration modal specifics */
+.concentration-modal { border-color: #7b5ea7; }
+.concentration-modal .modal-title { color: #b89ee8; }
+
+/* Purchase result modal */
+.purchase-modal.accepted { border-color: #2fb896; }
+.purchase-modal.accepted .modal-title { color: #2fb896; }
+.purchase-modal.rejected { border-color: #cc3030; }
+.purchase-modal.rejected .modal-title { color: #ff6b6b; }
+
+.purchase-modal-items {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+.purchase-modal-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  text-align: left;
+}
+.pmi-name { flex: 1; color: var(--color-parchment); }
+.pmi-qty { color: var(--color-text-dim); }
+.pmi-price { color: var(--color-gold-bright); }
+.purchase-modal-total {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  color: var(--color-text-dim);
+  margin: 0;
+}
+.purchase-modal-total strong { color: var(--color-gold-bright); font-size: 1.1rem; }
 </style>
+

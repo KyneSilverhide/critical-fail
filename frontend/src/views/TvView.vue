@@ -122,6 +122,7 @@ onMounted(() => {
     tvMode.value = mode
     if (imageUrl) currentImageUrl.value = imageUrl
     if (merchantData) activeMerchant.value = merchantData
+    if (mode === 'lobby') activeMerchant.value = null
   })
 
   socket.on('vote-started', (voteData) => {
@@ -390,8 +391,9 @@ onUnmounted(() => {
   background: radial-gradient(ellipse at top, #1a0f05 0%, #0a0802 60%, #000 100%);
   display: flex;
   flex-direction: column;
-  padding: 2rem;
+  padding: 2.5rem 3rem;
   box-sizing: border-box;
+  font-size: 18px; /* Base font size boosted for TV viewing distance */
 }
 
 /* ── Loading / Error ─────────────────────────────────────────────────── */
@@ -495,8 +497,8 @@ onUnmounted(() => {
 .party-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 2rem;
   align-content: start;
 }
 
@@ -505,11 +507,11 @@ onUnmounted(() => {
   position: relative;
   background: linear-gradient(160deg, #2a1e10 0%, #1a1208 50%, #120d05 100%);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 1.5rem;
+  border-radius: 20px;
+  padding: 2rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   overflow: hidden;
   transition: border-color 0.3s, box-shadow 0.3s;
 }
@@ -570,11 +572,11 @@ onUnmounted(() => {
 
 /* Avatar */
 .card-avatar {
-  width: 90px;
-  height: 90px;
+  width: 110px;
+  height: 110px;
   border-radius: 50%;
   overflow: hidden;
-  border: 2px solid var(--color-gold-dark);
+  border: 3px solid var(--color-gold-dark);
   flex-shrink: 0;
   background: rgba(255,255,255,0.07);
   display: flex;
@@ -588,7 +590,7 @@ onUnmounted(() => {
 }
 .avatar-fallback {
   font-family: var(--font-heading);
-  font-size: 2.2rem;
+  font-size: 2.8rem;
   color: var(--color-gold-dark);
   font-weight: 700;
   line-height: 1;
@@ -603,7 +605,7 @@ onUnmounted(() => {
 }
 .card-name {
   font-family: var(--font-heading);
-  font-size: clamp(0.9rem, 2vw, 1.3rem);
+  font-size: clamp(1.1rem, 2.2vw, 1.6rem);
   color: var(--color-parchment);
   letter-spacing: 0.05em;
   white-space: nowrap;
@@ -650,16 +652,16 @@ onUnmounted(() => {
 .hp-numbers { display: flex; align-items: baseline; gap: 0.3rem; }
 .hp-current {
   font-family: var(--font-heading);
-  font-size: clamp(1.6rem, 4vw, 2.5rem);
+  font-size: clamp(2rem, 5vw, 3.5rem);
   font-weight: 900;
   line-height: 1;
   transition: color 0.4s;
 }
-.hp-separator { font-family: var(--font-heading); font-size: 1.2rem; color: var(--color-border); }
-.hp-max { font-family: var(--font-heading); font-size: 1rem; color: var(--color-text-dim); }
+.hp-separator { font-family: var(--font-heading); font-size: 1.5rem; color: var(--color-border); }
+.hp-max { font-family: var(--font-heading); font-size: 1.3rem; color: var(--color-text-dim); }
 .hp-label {
   font-family: var(--font-heading);
-  font-size: 0.65rem;
+  font-size: 0.8rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--color-text-dim);
@@ -667,28 +669,28 @@ onUnmounted(() => {
 }
 
 .hp-track {
-  height: 10px;
+  height: 14px;
   background: rgba(255,255,255,0.06);
-  border-radius: 5px;
+  border-radius: 7px;
   overflow: hidden;
 }
 .hp-fill {
   height: 100%;
-  border-radius: 5px;
+  border-radius: 7px;
   transition: width 0.6s ease, background 0.6s ease;
-  box-shadow: 0 0 8px currentColor;
+  box-shadow: 0 0 10px currentColor;
 }
 
 /* Card Footer */
 .card-footer { display: flex; justify-content: flex-end; }
 .status-badge {
   font-family: var(--font-heading);
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   border: 1px solid;
   border-radius: 20px;
-  padding: 0.15rem 0.5rem;
+  padding: 0.2rem 0.7rem;
   background: rgba(0,0,0,0.2);
 }
 
@@ -887,17 +889,17 @@ onUnmounted(() => {
 }
 .merchant-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
 }
 .merchant-item {
   background: linear-gradient(160deg, #2a1e10 0%, #1a1208 100%);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 1.25rem;
+  border-radius: 14px;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.6rem;
   transition: border-color 0.2s;
 }
 .merchant-item:not(.out-of-stock):hover {
@@ -909,20 +911,20 @@ onUnmounted(() => {
 }
 .item-category {
   font-family: var(--font-heading);
-  font-size: 0.55rem;
+  font-size: 0.65rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--color-gold-dark);
 }
 .item-name {
   font-family: var(--font-heading);
-  font-size: clamp(0.85rem, 1.8vw, 1.1rem);
+  font-size: clamp(1rem, 2vw, 1.3rem);
   color: var(--color-parchment);
   letter-spacing: 0.04em;
 }
 .item-desc {
   font-family: var(--font-body);
-  font-size: clamp(0.7rem, 1.3vw, 0.85rem);
+  font-size: clamp(0.8rem, 1.5vw, 1rem);
   color: var(--color-text-dim);
   line-height: 1.4;
   margin: 0;
@@ -936,19 +938,19 @@ onUnmounted(() => {
 }
 .item-price {
   font-family: var(--font-title);
-  font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+  font-size: clamp(1.4rem, 3vw, 2rem);
   color: var(--color-gold-bright);
   text-shadow: 0 0 12px rgba(240,192,64,0.4);
 }
 .item-stock {
   font-family: var(--font-heading);
-  font-size: 0.7rem;
+  font-size: 0.85rem;
   letter-spacing: 0.08em;
   color: var(--color-text-dim);
   background: rgba(255,255,255,0.06);
   border: 1px solid var(--color-border);
   border-radius: 20px;
-  padding: 0.15rem 0.5rem;
+  padding: 0.2rem 0.65rem;
 }
 .item-stock.unlimited { color: var(--color-gold-dark); border-color: var(--color-gold-dark); }
 .item-stock.empty { color: #ff6b6b; border-color: #8b2a2a; background: rgba(139,42,42,0.1); }
@@ -960,10 +962,10 @@ onUnmounted(() => {
 }
 .footer-text {
   font-family: var(--font-heading);
-  font-size: 0.6rem;
+  font-size: 0.8rem;
   letter-spacing: 0.4em;
   text-transform: uppercase;
   color: var(--color-border);
-  opacity: 0.5;
+  opacity: 0.6;
 }
 </style>
