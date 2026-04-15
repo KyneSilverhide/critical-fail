@@ -103,7 +103,10 @@ router.patch('/:id/close', authenticateToken, async (req, res) => {
       for (const img of imagesRes.rows) {
         const filename = path.basename(img.url)
         const filePath = path.join(__dirname, '../../uploads', filename)
-        await fs.unlink(filePath).catch(() => {})
+        // Silently ignore missing files (may have been manually deleted)
+        await fs.unlink(filePath).catch((err) => {
+          console.error('Could not delete image file (may already be missing):', filePath, err.code)
+        })
       }
       await pool.query('DELETE FROM session_images WHERE session_id = $1', [req.params.id])
     } catch (cleanErr) {

@@ -41,7 +41,7 @@ const DND_PRESETS = [
   { name: 'Armure de cuir', description: 'CA : 11 + mod. Dex', price: 100, stock: 2, category: 'Armures' },
   { name: 'Cotte de mailles', description: 'CA : 16, Force min 13', price: 750, stock: 1, category: 'Armures' },
   { name: 'Bouclier', description: 'CA : +2', price: 100, stock: 3, category: 'Armures' },
-  { name: 'Parchemin d\'identification', description: 'Identifie un objet magique', price: 200, stock: 2, category: 'Magie' },
+  { name: "Parchemin d'identification", description: 'Identifie un objet magique', price: 200, stock: 2, category: 'Magie' },
   { name: 'Parchemin de sorts (1er niv.)', description: 'Sort aléatoire de 1er niveau', price: 150, stock: 2, category: 'Magie' },
 ]
 

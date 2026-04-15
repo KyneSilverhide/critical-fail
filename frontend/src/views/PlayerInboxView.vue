@@ -152,25 +152,25 @@ function addNotification(message, type = 'info') {
 
 const handleMerchantShown = (data) => { activeMerchant.value = data }
 const handleMerchantItemsUpdated = (data) => { activeMerchant.value = data }
+function clearPendingPurchases() {
+  Object.keys(purchaseStateByItem.value).forEach(k => {
+    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
+  })
+}
+
 const handlePurchaseRequested = ({ itemId }) => {
   // state stays 'pending' until confirmed
 }
 const handlePurchaseAccepted = ({ itemName, finalPrice }) => {
-  Object.keys(purchaseStateByItem.value).forEach(k => {
-    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
-  })
+  clearPendingPurchases()
   addNotification(`✅ Achat accepté : ${itemName} (${finalPrice} po)`, 'success')
 }
 const handlePurchaseRejected = ({ itemName }) => {
-  Object.keys(purchaseStateByItem.value).forEach(k => {
-    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
-  })
+  clearPendingPurchases()
   addNotification(`❌ Achat refusé : ${itemName}`, 'error')
 }
 const handlePurchaseCounterOffer = (data) => {
-  Object.keys(purchaseStateByItem.value).forEach(k => {
-    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
-  })
+  clearPendingPurchases()
   counterOffers.value.push(data)
 }
 const handleCounterOfferResult = ({ accepted, itemName, finalPrice }) => {
@@ -181,9 +181,7 @@ const handleCounterOfferResult = ({ accepted, itemName, finalPrice }) => {
   }
 }
 const handlePurchaseError = ({ message }) => {
-  Object.keys(purchaseStateByItem.value).forEach(k => {
-    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
-  })
+  clearPendingPurchases()
   addNotification(`⚠️ ${message}`, 'error')
 }
 
