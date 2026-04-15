@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { sessionStore } from '../../stores/session.js'
+import { getSocket } from '../../socket.js'
 
 function hpPercent(player) {
   if (!player.max_hp) return 100
@@ -39,6 +40,12 @@ function parseConditions(player) {
     return Array.isArray(arr) ? arr : []
   } catch { return [] }
 }
+
+function kickPlayer(player) {
+  if (!confirm(`Expulser ${player.player_name} de la session ?`)) return
+  const socket = getSocket()
+  socket.emit('kick-player', { playerId: player.id })
+}
 </script>
 
 <template>
@@ -58,6 +65,7 @@ function parseConditions(player) {
             ❤️ {{ player.current_hp ?? '?' }}<span class="hp-max">/ {{ player.max_hp ?? '?' }}</span>
           </span>
           <span class="player-badge">En ligne</span>
+          <button class="kick-btn" @click="kickPlayer(player)" title="Expulser de la session">✕</button>
         </div>
         <div v-if="player.max_hp" class="hp-bar-track">
           <div class="hp-bar-fill"
@@ -141,4 +149,18 @@ function parseConditions(player) {
   padding: 0.1rem 0.4rem;
   white-space: nowrap;
 }
+
+.kick-btn {
+  background: none;
+  border: 1px solid rgba(200,48,48,0.4);
+  border-radius: 4px;
+  color: #ff6b6b;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.65rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+.kick-btn:hover { background: rgba(200,48,48,0.2); border-color: #ff4444; }
 </style>

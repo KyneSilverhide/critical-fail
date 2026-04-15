@@ -627,6 +627,35 @@ function setupSocket(io) {
         io.to(`admin:${socket.sessionId}`).emit('counter-offer-response', { requestId, accepted: accept, playerName: req.player_name })
       } catch (err) { console.error(err) }
     })
+
+    // ── Admin: kick player ───────────────────────────────────────────────────
+    socket.on('kick-player', async ({ playerId }) => {
+      if (!socket.admin) return
+      try {
+        const pr = await pool.query(
+          'SELECT socket_id, player_name, session_id FROM players WHERE id = $1',
+          [playerId]
+        )
+        const player = pr.rows[0]
+        if (!player) return
+        // Notify the player's socket before removing
+        if (player.socket_id) {
+          io.to(player.socket_id).emit('kicked')
+        }
+        // Remove from DB
+        await pool.query('DELETE FROM players WHERE id = $1', [playerId])
+        // Notify admin and TV
+        io.to(`admin:${player.session_id}`).emit('player-left', { playerId })
+        io.to(`tv:${player.session_id}`).emit('player-left', { playerId })
+        // Log event
+        await pool.query(
+          'INSERT INTO session_events (session_id, event_type, description, player_name) VALUES ($1, $2, $3, $4)',
+          [player.session_id, 'leave', `${player.player_name} a été expulsé de la session`, player.player_name]
+        )
+        const leaveEvent = { eventType: 'leave', description: `${player.player_name} a été expulsé de la session`, playerName: player.player_name, createdAt: new Date() }
+        io.to(`admin:${player.session_id}`).emit('session-event', leaveEvent)
+      } catch (err) { console.error(err) }
+    })
   })
 }
 
