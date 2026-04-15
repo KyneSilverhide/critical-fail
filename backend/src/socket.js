@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken')
 const QRCode = require('qrcode')
+const crypto = require('crypto')
 const pool = require('./db')
 
 async function getMerchantData(merchantId) {
@@ -454,7 +455,7 @@ function setupSocket(io) {
       try {
         const pname = await pool.query('SELECT player_name FROM players WHERE id = $1', [socket.playerId])
         const playerName = pname.rows[0]?.player_name || 'Inconnu'
-        const batchId = require('crypto').randomUUID()
+        const batchId = crypto.randomUUID()
         const batchItems = []
         let totalPrice = 0
         let merchantId = null

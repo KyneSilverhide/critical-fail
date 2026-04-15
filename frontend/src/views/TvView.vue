@@ -122,7 +122,7 @@ onMounted(() => {
     tvMode.value = mode
     if (imageUrl) currentImageUrl.value = imageUrl
     if (merchantData) activeMerchant.value = merchantData
-    if (mode === 'lobby') activeMerchant.value = null
+    else if (mode === 'lobby') activeMerchant.value = null
   })
 
   socket.on('vote-started', (voteData) => {
