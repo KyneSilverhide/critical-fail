@@ -18,7 +18,7 @@ const avatarPreview = ref(null)
 const error = ref('')
 const loading = ref(false)
 
-const BACKEND_URL = window.__RUNTIME_CONFIG__.VITE_BACKEND_URL
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 const DND_CLASSES = [
   'Barbare', 'Barde', 'Clerc', 'Druide', 'Guerrier',

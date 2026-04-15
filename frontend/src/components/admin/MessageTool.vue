@@ -4,7 +4,7 @@ import { sessionStore } from '../../stores/session.js'
 import { authStore } from '../../stores/auth.js'
 import { getSocket } from '../../socket.js'
 
-const BACKEND_URL = window.__RUNTIME_CONFIG__.VITE_BACKEND_URL
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 const selectedPlayerId = ref('all')
 const messageText = ref('')

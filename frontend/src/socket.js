@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client'
 
-const BACKEND_URL = window.__RUNTIME_CONFIG__.VITE_BACKEND_URL
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 let socket = null
 
