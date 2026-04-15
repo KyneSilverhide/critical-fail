@@ -2,6 +2,7 @@ const express = require('express')
 const multer = require('multer')
 const path = require('path')
 const { authenticateToken } = require('../middleware/auth')
+const pool = require('../db')
 
 const router = express.Router()
 
@@ -35,9 +36,15 @@ const avatarUpload = multer({
   fileFilter: imageFilter,
 })
 
-router.post('/', authenticateToken, upload.single('file'), (req, res) => {
+router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' })
-  res.json({ url: `/uploads/${req.file.filename}` })
+  const url = `/uploads/${req.file.filename}`
+  if (req.body.session_id) {
+    try {
+      await pool.query('INSERT INTO session_images (session_id, url) VALUES ($1, $2)', [req.body.session_id, url])
+    } catch (err) { console.error(err) }
+  }
+  res.json({ url })
 })
 
 // Public endpoint for player avatar uploads (no admin auth required)

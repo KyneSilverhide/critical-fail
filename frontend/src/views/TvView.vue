@@ -9,6 +9,11 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 const session = ref(null)
 const players = ref([])
 const connectionError = ref('')
+const tvMode = ref('lobby')
+const qrCodeDataUrl = ref(null)
+const sessionCode = ref('')
+const currentImageUrl = ref(null)
+const activeVote = ref(null)
 
 // Track HP change animations per player: { id -> { type: 'damage'|'heal', delta: number, key: number } }
 const hpAnimations = ref({})
@@ -73,6 +78,19 @@ function parseConditions(player) {
   } catch { return [] }
 }
 
+function barWidth(optionIndex) {
+  if (!activeVote.value || !activeVote.value.totalVotes) return 0
+  return Math.round((activeVote.value.results[optionIndex] / activeVote.value.totalVotes) * 100)
+}
+
+function voterNamesFor(optionIndex) {
+  if (!activeVote.value) return ''
+  return activeVote.value.voterNames
+    .filter(v => v.optionIndex === optionIndex)
+    .map(v => v.name)
+    .join(', ')
+}
+
 let socket = null
 
 onMounted(() => {
@@ -82,11 +100,32 @@ onMounted(() => {
     socket.emit('tv-join', { sessionCode: route.params.code })
   })
 
-  socket.on('tv-snapshot', ({ session: s, players: p }) => {
-    session.value = s
-    players.value = p
-    // Initialize previousHp tracking
-    p.forEach(pl => { previousHp.value[pl.id] = pl.current_hp })
+  socket.on('tv-snapshot', (data) => {
+    session.value = data.session
+    players.value = data.players
+    tvMode.value = data.tvMode || 'lobby'
+    qrCodeDataUrl.value = data.qrCodeDataUrl || null
+    sessionCode.value = data.sessionCode || ''
+    currentImageUrl.value = data.currentImageUrl || null
+    activeVote.value = data.activeVote || null
+    data.players.forEach(pl => { previousHp.value[pl.id] = pl.current_hp })
+  })
+
+  socket.on('tv-mode-changed', ({ mode, imageUrl }) => {
+    tvMode.value = mode
+    if (imageUrl) currentImageUrl.value = imageUrl
+  })
+
+  socket.on('vote-started', (voteData) => {
+    activeVote.value = { ...voteData, isClosed: false }
+  })
+
+  socket.on('vote-updated', (voteData) => {
+    activeVote.value = { ...voteData, isClosed: false }
+  })
+
+  socket.on('vote-closed', (voteData) => {
+    activeVote.value = { ...voteData, isClosed: true }
   })
 
   socket.on('player-joined', (player) => {
@@ -114,7 +153,6 @@ onMounted(() => {
       previousHp.value[players.value[idx].id] = newHp
 
       const id = players.value[idx].id
-      // Trigger animation (use a key to force re-trigger if updated quickly)
       hpAnimations.value = {
         ...hpAnimations.value,
         [id]: { type: delta < 0 ? 'damage' : 'heal', delta, key: Date.now() },
@@ -131,6 +169,13 @@ onMounted(() => {
     const idx = players.value.findIndex(p => String(p.id) === String(playerId))
     if (idx !== -1) {
       players.value[idx] = { ...players.value[idx], conditions }
+    }
+  })
+
+  socket.on('concentration-updated', ({ playerId, isConcentrating }) => {
+    const idx = players.value.findIndex(p => String(p.id) === String(playerId))
+    if (idx !== -1) {
+      players.value[idx] = { ...players.value[idx], is_concentrating: isConcentrating }
     }
   })
 
@@ -166,92 +211,134 @@ onUnmounted(() => {
         <p class="party-label">Groupe d'Aventuriers</p>
       </header>
 
-      <div v-if="players.length === 0" class="tv-empty">
-        <p class="empty-icon">🏰</p>
-        <p class="empty-text">En attente des aventuriers…</p>
+      <!-- Lobby mode: QR code + session code -->
+      <div v-if="tvMode === 'lobby'" class="lobby-display">
+        <p class="lobby-title">Rejoignez la partie !</p>
+        <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" alt="QR Code" class="lobby-qr" />
+        <div class="lobby-code">{{ sessionCode }}</div>
+        <p class="lobby-hint">Scannez le QR code ou saisissez le code sur l'application</p>
       </div>
 
-      <main v-else class="party-grid">
-        <div
-          v-for="player in players"
-          :key="player.id"
-          class="player-card"
-          :class="{
-            'is-damage': hpAnimations[player.id]?.type === 'damage',
-            'is-heal': hpAnimations[player.id]?.type === 'heal',
-            'is-critical': hpPercent(player) <= 20 && hpPercent(player) > 0,
-            'is-ko': hpPercent(player) <= 0,
-          }"
-        >
-          <!-- Header -->
-          <div class="card-header">
-            <!-- Avatar -->
-            <div class="card-avatar">
-              <img v-if="avatarUrl(player)" :src="avatarUrl(player)" :alt="player.player_name" class="avatar-img" />
-              <span v-else class="avatar-fallback">{{ player.player_name?.[0]?.toUpperCase() || '?' }}</span>
-            </div>
-
-            <div class="card-identity">
-              <span class="card-name">{{ player.player_name }}</span>
-              <span v-if="player.dnd_class" class="class-badge">{{ player.dnd_class }}</span>
-            </div>
-
-            <div class="ac-shield">
-              <span class="ac-icon">🛡️</span>
-              <span class="ac-value">{{ player.ac ?? 10 }}</span>
-            </div>
-          </div>
-
-          <!-- HP Bar -->
-          <div class="hp-section">
-            <div class="hp-numbers">
-              <span class="hp-current" :style="{ color: hpBarColor(player) }">
-                {{ player.current_hp ?? 0 }}
-              </span>
-              <span class="hp-separator">/</span>
-              <span class="hp-max">{{ player.max_hp ?? 0 }}</span>
-              <span class="hp-label">PV</span>
-            </div>
-            <div class="hp-track">
-              <div
-                class="hp-fill"
-                :style="{ width: hpPercent(player) + '%', background: hpBarColor(player) }"
-              />
-            </div>
-          </div>
-
-          <!-- Status -->
-          <div class="card-footer">
-            <span class="status-badge" :style="{ color: statusColor(player), borderColor: statusColor(player) }">
-              {{ hpStatus(player) }}
-            </span>
-          </div>
-
-          <!-- Conditions -->
-          <div v-if="parseConditions(player).length > 0" class="conditions-row">
-            <span
-              v-for="cid in parseConditions(player)"
-              :key="cid"
-              class="condition-badge"
-              :title="CONDITION_LABELS[cid]?.label || cid"
-            >
-              {{ CONDITION_LABELS[cid]?.icon || '⚡' }} {{ CONDITION_LABELS[cid]?.label || cid }}
-            </span>
-          </div>
-
-          <!-- HP change floating indicator -->
-          <Transition name="hp-float">
-            <div
-              v-if="hpAnimations[player.id]"
-              :key="hpAnimations[player.id].key"
-              class="hp-delta"
-              :class="hpAnimations[player.id].type === 'damage' ? 'hp-delta-damage' : 'hp-delta-heal'"
-            >
-              {{ hpAnimations[player.id].delta > 0 ? '+' : '' }}{{ hpAnimations[player.id].delta }}
-            </div>
-          </Transition>
+      <!-- Combat mode: party HP grid -->
+      <template v-else-if="tvMode === 'combat'">
+        <div v-if="players.length === 0" class="tv-empty">
+          <p class="empty-icon">🏰</p>
+          <p class="empty-text">En attente des aventuriers…</p>
         </div>
-      </main>
+
+        <main v-else class="party-grid">
+          <div
+            v-for="player in players"
+            :key="player.id"
+            class="player-card"
+            :class="{
+              'is-damage': hpAnimations[player.id]?.type === 'damage',
+              'is-heal': hpAnimations[player.id]?.type === 'heal',
+              'is-critical': hpPercent(player) <= 20 && hpPercent(player) > 0,
+              'is-ko': hpPercent(player) <= 0,
+            }"
+          >
+            <!-- Header -->
+            <div class="card-header">
+              <!-- Avatar -->
+              <div class="card-avatar">
+                <img v-if="avatarUrl(player)" :src="avatarUrl(player)" :alt="player.player_name" class="avatar-img" />
+                <span v-else class="avatar-fallback">{{ player.player_name?.[0]?.toUpperCase() || '?' }}</span>
+              </div>
+
+              <div class="card-identity">
+                <span class="card-name">{{ player.player_name }}</span>
+                <span v-if="player.dnd_class" class="class-badge">{{ player.dnd_class }}</span>
+              </div>
+
+              <div class="ac-shield">
+                <span class="ac-icon">🛡️</span>
+                <span class="ac-value">{{ player.ac ?? 10 }}</span>
+              </div>
+
+              <span v-if="player.is_concentrating" class="concentration-badge" title="Concentration">🎯</span>
+            </div>
+
+            <!-- HP Bar -->
+            <div class="hp-section">
+              <div class="hp-numbers">
+                <span class="hp-current" :style="{ color: hpBarColor(player) }">
+                  {{ player.current_hp ?? 0 }}
+                </span>
+                <span class="hp-separator">/</span>
+                <span class="hp-max">{{ player.max_hp ?? 0 }}</span>
+                <span class="hp-label">PV</span>
+              </div>
+              <div class="hp-track">
+                <div
+                  class="hp-fill"
+                  :style="{ width: hpPercent(player) + '%', background: hpBarColor(player) }"
+                />
+              </div>
+            </div>
+
+            <!-- Status -->
+            <div class="card-footer">
+              <span class="status-badge" :style="{ color: statusColor(player), borderColor: statusColor(player) }">
+                {{ hpStatus(player) }}
+              </span>
+            </div>
+
+            <!-- Conditions -->
+            <div v-if="parseConditions(player).length > 0" class="conditions-row">
+              <span
+                v-for="cid in parseConditions(player)"
+                :key="cid"
+                class="condition-badge"
+                :title="CONDITION_LABELS[cid]?.label || cid"
+              >
+                {{ CONDITION_LABELS[cid]?.icon || '⚡' }} {{ CONDITION_LABELS[cid]?.label || cid }}
+              </span>
+            </div>
+
+            <!-- HP change floating indicator -->
+            <Transition name="hp-float">
+              <div
+                v-if="hpAnimations[player.id]"
+                :key="hpAnimations[player.id].key"
+                class="hp-delta"
+                :class="hpAnimations[player.id].type === 'damage' ? 'hp-delta-damage' : 'hp-delta-heal'"
+              >
+                {{ hpAnimations[player.id].delta > 0 ? '+' : '' }}{{ hpAnimations[player.id].delta }}
+              </div>
+            </Transition>
+          </div>
+        </main>
+      </template>
+
+      <!-- Vote mode -->
+      <div v-else-if="tvMode === 'vote'" class="vote-display">
+        <h2 class="vote-question">{{ activeVote?.question }}</h2>
+        <div class="vote-progress">{{ activeVote?.totalVotes }} / {{ activeVote?.totalPlayers }} joueurs ont voté</div>
+        <div v-if="activeVote?.isClosed" class="vote-results">
+          <div v-for="(option, i) in activeVote.options" :key="i" class="vote-option">
+            <div class="vote-option-header">
+              <span class="vote-option-label">{{ option }}</span>
+              <span class="vote-option-count">{{ activeVote.results[i] }} vote(s)</span>
+            </div>
+            <div class="vote-bar">
+              <div class="vote-bar-fill" :style="{ width: barWidth(i) + '%' }"></div>
+            </div>
+            <span v-if="!activeVote.isAnonymous" class="voter-names">
+              {{ voterNamesFor(i) }}
+            </span>
+          </div>
+        </div>
+        <div v-else class="vote-waiting">
+          <div class="vote-orb"></div>
+          <p>Vote en cours…</p>
+        </div>
+      </div>
+
+      <!-- Image mode -->
+      <div v-else-if="tvMode === 'image'" class="image-display">
+        <img :src="currentImageUrl" class="tv-image" alt="Image affichée" />
+      </div>
 
       <footer class="tv-footer">
         <span class="footer-text">CRITICAL FAIL • SESSION EN COURS</span>
@@ -319,6 +406,48 @@ onUnmounted(() => {
   text-transform: uppercase;
   color: var(--color-text-dim);
   margin-top: 0.5rem;
+}
+
+/* ── Lobby mode ───────────────────────────────────────────────────────── */
+.lobby-display {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+}
+.lobby-title {
+  font-family: var(--font-title);
+  font-size: clamp(2rem, 4vw, 3rem);
+  color: var(--color-gold-bright);
+  text-shadow: 0 0 30px rgba(240,192,64,0.5);
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+.lobby-qr {
+  width: clamp(200px, 30vw, 400px);
+  height: clamp(200px, 30vw, 400px);
+  border: 4px solid var(--color-gold-dark);
+  border-radius: 16px;
+  background: white;
+  padding: 8px;
+}
+.lobby-code {
+  font-family: var(--font-title);
+  font-size: clamp(4rem, 12vw, 8rem);
+  color: var(--color-gold-bright);
+  text-shadow: 0 0 60px rgba(240,192,64,0.6), 0 4px 0 rgba(0,0,0,0.8);
+  letter-spacing: 0.2em;
+  line-height: 1;
+}
+.lobby-hint {
+  font-family: var(--font-heading);
+  font-size: clamp(0.7rem, 1.5vw, 1rem);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  text-align: center;
 }
 
 /* ── Empty ───────────────────────────────────────────────────────────── */
@@ -482,6 +611,11 @@ onUnmounted(() => {
   color: #89c4ff;
 }
 
+.concentration-badge {
+  font-size: 1.3rem;
+  filter: drop-shadow(0 0 6px rgba(123,94,167,0.8));
+}
+
 /* HP Section */
 .hp-section { display: flex; flex-direction: column; gap: 0.5rem; }
 .hp-numbers { display: flex; align-items: baseline; gap: 0.3rem; }
@@ -585,6 +719,112 @@ onUnmounted(() => {
   20%  { opacity: 1; transform: translate(-50%, -70%) scale(1.1); }
   70%  { opacity: 0.8; transform: translate(-50%, -100%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -130%) scale(0.9); }
+}
+
+/* ── Vote mode ────────────────────────────────────────────────────────── */
+.vote-display {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+.vote-question {
+  font-family: var(--font-title);
+  font-size: clamp(1.5rem, 4vw, 3rem);
+  color: var(--color-gold-bright);
+  text-align: center;
+  margin: 0;
+}
+.vote-progress {
+  font-family: var(--font-heading);
+  font-size: clamp(0.8rem, 2vw, 1.2rem);
+  letter-spacing: 0.15em;
+  color: var(--color-text-dim);
+}
+.vote-results {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.vote-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.vote-option-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.vote-option-label {
+  font-family: var(--font-heading);
+  font-size: clamp(0.9rem, 2vw, 1.3rem);
+  color: var(--color-parchment);
+}
+.vote-option-count {
+  font-family: var(--font-heading);
+  font-size: clamp(0.75rem, 1.5vw, 1rem);
+  color: var(--color-gold-dark);
+}
+.vote-bar {
+  height: 20px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.vote-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-gold-dark), var(--color-gold-bright));
+  border-radius: 10px;
+  transition: width 0.8s ease;
+  box-shadow: 0 0 10px rgba(240,192,64,0.4);
+}
+.voter-names {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+.vote-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+.vote-orb {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid var(--color-gold-dark);
+  border-top-color: var(--color-gold-bright);
+  animation: spin 1.5s linear infinite;
+  box-shadow: 0 0 30px rgba(240,192,64,0.3);
+}
+.vote-waiting p {
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  letter-spacing: 0.2em;
+  color: var(--color-text-dim);
+}
+
+/* ── Image mode ───────────────────────────────────────────────────────── */
+.image-display {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tv-image {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
 }
 
 /* ── Footer ──────────────────────────────────────────────────────────── */

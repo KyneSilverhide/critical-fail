@@ -5,14 +5,26 @@ const { authenticateToken } = require('../middleware/auth')
 
 const router = express.Router()
 
+const crypto = require('crypto')
+
+async function generateUniqueCode(pool) {
+  for (let i = 0; i < 10; i++) {
+    const code = (10000000 + crypto.randomInt(0, 90000000)).toString()
+    const exists = await pool.query('SELECT id FROM sessions WHERE code = $1', [code])
+    if (!exists.rows[0]) return code
+  }
+  throw new Error('Could not generate unique code')
+}
+
 router.post('/', authenticateToken, async (req, res) => {
   const { name } = req.body
   if (!name) return res.status(400).json({ error: 'Session name required.' })
 
   try {
+    const code = await generateUniqueCode(pool)
     const result = await pool.query(
-      'INSERT INTO sessions (name, created_by) VALUES ($1, $2) RETURNING *',
-      [name, req.admin.id]
+      'INSERT INTO sessions (name, code, created_by) VALUES ($1, $2, $3) RETURNING *',
+      [name, code, req.admin.id]
     )
     const session = result.rows[0]
 
@@ -124,6 +136,19 @@ router.get('/:id/journal', authenticateToken, async (req, res) => {
     ].filter(Boolean).join('\n')
 
     res.json({ events: rows, summary })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error.' })
+  }
+})
+
+router.get('/:id/images', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, url, uploaded_at FROM session_images WHERE session_id = $1 ORDER BY uploaded_at DESC',
+      [req.params.id]
+    )
+    res.json(result.rows)
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Server error.' })

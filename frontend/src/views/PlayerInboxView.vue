@@ -26,6 +26,16 @@ const hpBarColor = computed(() => {
   return '#e03030'
 })
 
+// Concentration
+const isConcentrating = ref(false)
+const concentrationWarning = ref(null)
+
+function toggleConcentration() {
+  isConcentrating.value = !isConcentrating.value
+  const socket = getSocket()
+  socket.emit('update-concentration', { isConcentrating: isConcentrating.value })
+}
+
 // Conditions D&D 5e 2014
 const DND_CONDITIONS = [
   { id: 'blinded', label: 'Aveuglé', icon: '👁️' },
@@ -77,6 +87,15 @@ function leaveSession() {
   router.push('/')
 }
 
+// Vote
+const activeVote = ref(null)
+const myVote = ref(null)
+
+function submitVote(optionIndex) {
+  const socket = getSocket()
+  socket.emit('submit-vote', { voteId: activeVote.value.id, optionIndex })
+}
+
 const handleNewMessage = (msg) => messages.value.push({ ...msg, kind: 'message' })
 const handleDiceResult = (data) => messages.value.push({ ...data, kind: 'dice' })
 const handleHpConfirmed = (data) => {
@@ -87,6 +106,22 @@ const handleHpConfirmed = (data) => {
   hpSent.value = true
   setTimeout(() => { hpSent.value = false }, 2000)
 }
+const handleConcentrationConfirmed = (data) => {
+  isConcentrating.value = data.isConcentrating
+}
+const handleConcentrationWarning = (data) => {
+  concentrationWarning.value = data
+}
+const handleVoteStarted = (voteData) => {
+  activeVote.value = { ...voteData, isClosed: false }
+  myVote.value = null
+}
+const handleVoteClosed = (voteData) => {
+  activeVote.value = { ...voteData, isClosed: true }
+}
+const handleVoteSubmitted = (data) => {
+  myVote.value = data.optionIndex
+}
 
 onMounted(() => {
   if (!sessionStore.activeSession) { router.push('/join'); return }
@@ -94,6 +129,11 @@ onMounted(() => {
   socket.on('new-message', handleNewMessage)
   socket.on('dice-result', handleDiceResult)
   socket.on('hp-update-confirmed', handleHpConfirmed)
+  socket.on('concentration-confirmed', handleConcentrationConfirmed)
+  socket.on('concentration-warning', handleConcentrationWarning)
+  socket.on('vote-started', handleVoteStarted)
+  socket.on('vote-closed', handleVoteClosed)
+  socket.on('vote-submitted', handleVoteSubmitted)
 })
 
 onUnmounted(() => {
@@ -102,6 +142,11 @@ onUnmounted(() => {
     socket.off('new-message', handleNewMessage)
     socket.off('dice-result', handleDiceResult)
     socket.off('hp-update-confirmed', handleHpConfirmed)
+    socket.off('concentration-confirmed', handleConcentrationConfirmed)
+    socket.off('concentration-warning', handleConcentrationWarning)
+    socket.off('vote-started', handleVoteStarted)
+    socket.off('vote-closed', handleVoteClosed)
+    socket.off('vote-submitted', handleVoteSubmitted)
   }
 })
 </script>
@@ -161,6 +206,27 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <!-- Concentration Toggle -->
+      <div class="concentration-panel">
+        <button
+          class="concentration-btn"
+          :class="{ active: isConcentrating }"
+          @click="toggleConcentration"
+        >
+          <span class="concentration-icon">🎯</span>
+          <span>{{ isConcentrating ? 'Concentration active' : 'Se concentrer' }}</span>
+        </button>
+      </div>
+
+      <!-- Concentration Warning Banner -->
+      <div v-if="concentrationWarning" class="concentration-warning">
+        <div class="warning-content">
+          <p class="warning-title">⚠️ Jet de concentration requis !</p>
+          <p class="warning-desc">DD {{ concentrationWarning.dc }} ({{ concentrationWarning.damage }} dégâts subis)</p>
+        </div>
+        <button class="warning-dismiss" @click="concentrationWarning = null">✕</button>
+      </div>
+
       <!-- Conditions Panel -->
       <div class="conditions-panel">
         <span class="conditions-label">⚡ Conditions</span>
@@ -178,6 +244,28 @@ onUnmounted(() => {
         </div>
       </div>
     </header>
+
+    <!-- Vote Panel -->
+    <div v-if="activeVote" class="vote-panel">
+      <h3 class="vote-title">🗳️ Vote : {{ activeVote.question }}</h3>
+      <div v-if="myVote === null && !activeVote.isClosed" class="vote-options">
+        <button
+          v-for="(opt, i) in activeVote.options"
+          :key="i"
+          class="vote-option-btn"
+          @click="submitVote(i)"
+        >{{ opt }}</button>
+      </div>
+      <div v-else-if="myVote !== null && !activeVote.isClosed" class="vote-done">
+        <p>✓ Vous avez voté pour : <strong>{{ activeVote.options[myVote] }}</strong></p>
+      </div>
+      <div v-if="activeVote.isClosed" class="vote-results-mini">
+        <p class="vote-closed-label">Vote clôturé — Résultats :</p>
+        <p v-for="(opt, i) in activeVote.options" :key="i" class="vote-result-line">
+          {{ opt }}: <strong>{{ activeVote.results[i] }}</strong> vote(s)
+        </p>
+      </div>
+    </div>
 
     <main class="inbox-main">
       <div v-if="messages.length === 0" class="inbox-empty">
@@ -292,6 +380,85 @@ onUnmounted(() => {
 .hp-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .hp-send-btn.sent { border-color: #2fb896; background: rgba(47,184,150,0.15); color: #2fb896; }
 
+/* Concentration */
+.concentration-panel {
+  display: flex;
+}
+.concentration-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.03);
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.concentration-btn:hover {
+  border-color: #7b5ea7;
+  color: #b89ee8;
+}
+.concentration-btn.active {
+  border-color: #7b5ea7;
+  background: rgba(123,94,167,0.2);
+  color: #b89ee8;
+  box-shadow: 0 0 10px rgba(123,94,167,0.3);
+}
+.concentration-icon { font-size: 1rem; }
+
+/* Concentration Warning */
+.concentration-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(123,94,167,0.15);
+  border: 1px solid #7b5ea7;
+  border-radius: 10px;
+  animation: pulseWarning 2s ease-in-out infinite;
+}
+@keyframes pulseWarning {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(123,94,167,0.4); }
+  50% { box-shadow: 0 0 12px 4px rgba(123,94,167,0.3); }
+}
+.warning-content { flex: 1; }
+.warning-title {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #b89ee8;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.25rem;
+}
+.warning-desc {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+  margin: 0;
+}
+.warning-dismiss {
+  background: none;
+  border: 1px solid rgba(123,94,167,0.5);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b89ee8;
+  cursor: pointer;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.warning-dismiss:hover { background: rgba(123,94,167,0.2); }
+
 .inbox-main { flex: 1; padding: 1.5rem; }
 .inbox-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; gap: 0.75rem; }
 .empty-icon { font-size: 3rem; opacity: 0.5; }
@@ -349,4 +516,67 @@ onUnmounted(() => {
 
 .cond-icon { font-size: 0.85rem; }
 .cond-label { white-space: nowrap; }
+
+/* Vote Panel */
+.vote-panel {
+  margin: 0 1.5rem;
+  padding: 1rem;
+  background: linear-gradient(160deg, #0e1a2a, #091220);
+  border: 1px solid rgba(137,196,255,0.25);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.vote-title {
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  color: #89c4ff;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+.vote-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.vote-option-btn {
+  padding: 0.6rem 1rem;
+  background: rgba(137,196,255,0.08);
+  border: 1px solid rgba(137,196,255,0.3);
+  border-radius: 8px;
+  color: var(--color-parchment);
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+.vote-option-btn:hover {
+  background: rgba(137,196,255,0.18);
+  border-color: #89c4ff;
+  color: #89c4ff;
+}
+.vote-done {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: #2fb896;
+}
+.vote-done strong { color: var(--color-parchment); }
+.vote-closed-label {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin: 0 0 0.25rem;
+}
+.vote-result-line {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+  margin: 0;
+}
+.vote-result-line strong { color: var(--color-parchment); }
 </style>

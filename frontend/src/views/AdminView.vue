@@ -9,6 +9,7 @@ import PlayerList from '../components/admin/PlayerList.vue'
 import MessageTool from '../components/admin/MessageTool.vue'
 import CriticalFailTool from '../components/admin/CriticalFailTool.vue'
 import SessionJournal from '../components/admin/SessionJournal.vue'
+import TvControls from '../components/admin/TvControls.vue'
 
 const router = useRouter()
 const activeTab = ref('sessions')
@@ -18,6 +19,7 @@ const tabs = [
   { key: 'message', label: 'Message', icon: '✉️' },
   { key: 'dice', label: 'Critical Fail', icon: '🎲' },
   { key: 'journal', label: 'Journal', icon: '📜' },
+  { key: 'tv', label: 'TV', icon: '📺' },
 ]
 
 function logout() {
@@ -49,6 +51,10 @@ onMounted(() => {
   socket.on('conditions-updated', ({ playerId, conditions }) => {
     sessionStore.updatePlayerConditions(playerId, conditions)
   })
+
+  socket.on('concentration-updated', ({ playerId, isConcentrating }) => {
+    sessionStore.updatePlayerConcentration(playerId, isConcentrating)
+  })
 })
 
 watch(
@@ -68,6 +74,7 @@ onUnmounted(() => {
   socket.off('players-snapshot')
   socket.off('hp-updated')
   socket.off('conditions-updated')
+  socket.off('concentration-updated')
 })
 </script>
 
@@ -107,6 +114,10 @@ onUnmounted(() => {
       </div>
       <div v-show="activeTab === 'journal'">
         <SessionJournal />
+      </div>
+      <div v-show="activeTab === 'tv'">
+        <TvControls v-if="sessionStore.activeSession" />
+        <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
       </div>
     </main>
   </div>
@@ -216,5 +227,12 @@ onUnmounted(() => {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--color-border);
+}
+
+.no-session-msg {
+  font-family: var(--font-body);
+  color: var(--color-text-dim);
+  font-size: 0.9rem;
+  padding: 1rem 0;
 }
 </style>

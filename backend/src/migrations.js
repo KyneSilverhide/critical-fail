@@ -55,6 +55,40 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_style VARCHAR(20) DEFAULT 'n
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS text_effect VARCHAR(20) DEFAULT 'none';
 
 ALTER TABLE players ADD COLUMN IF NOT EXISTS conditions TEXT DEFAULT '[]';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS is_concentrating BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE sessions ALTER COLUMN code TYPE VARCHAR(40) USING code::text;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tv_mode VARCHAR(20) DEFAULT 'lobby';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS current_image_url VARCHAR(500);
+
+CREATE TABLE IF NOT EXISTS votes (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  question TEXT NOT NULL,
+  options JSON NOT NULL,
+  is_anonymous BOOLEAN DEFAULT FALSE,
+  status VARCHAR(20) DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS vote_responses (
+  id SERIAL PRIMARY KEY,
+  vote_id INTEGER REFERENCES votes(id),
+  player_id INTEGER REFERENCES players(id),
+  player_name VARCHAR(100),
+  option_index INTEGER NOT NULL,
+  voted_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (vote_id, player_id)
+);
+
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS current_vote_id INTEGER REFERENCES votes(id);
+
+CREATE TABLE IF NOT EXISTS session_images (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  url VARCHAR(500) NOT NULL,
+  uploaded_at TIMESTAMP DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS session_events (
   id SERIAL PRIMARY KEY,
