@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import { authStore } from '../../stores/auth.js'
 import { sessionStore } from '../../stores/session.js'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const BACKEND_URL = window.__RUNTIME_CONFIG__.VITE_BACKEND_URL
 
 const sessionName = ref('')
 const loading = ref(false)

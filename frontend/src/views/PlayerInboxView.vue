@@ -9,7 +9,7 @@ const router = useRouter()
 const messages = ref([])
 const playerInfo = ref(sessionStore.playerInfo || { name: 'Aventurier', hp: 20, maxHp: 20, ac: 10 })
 const sessionName = ref(sessionStore.activeSession?.name || 'Session')
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const BACKEND_URL = window.__RUNTIME_CONFIG__.VITE_BACKEND_URL
 
 // HP tracking
 const currentHp = ref(playerInfo.value?.hp ?? 20)

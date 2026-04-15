@@ -9,7 +9,7 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const BACKEND_URL = window.__RUNTIME_CONFIG__.VITE_BACKEND_URL
 
 async function login() {
   if (!username.value || !password.value) {
