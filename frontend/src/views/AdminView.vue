@@ -8,6 +8,7 @@ import SessionManager from '../components/admin/SessionManager.vue'
 import PlayerList from '../components/admin/PlayerList.vue'
 import MessageTool from '../components/admin/MessageTool.vue'
 import CriticalFailTool from '../components/admin/CriticalFailTool.vue'
+import SessionJournal from '../components/admin/SessionJournal.vue'
 
 const router = useRouter()
 const activeTab = ref('sessions')
@@ -16,6 +17,7 @@ const tabs = [
   { key: 'sessions', label: 'Sessions', icon: '📋' },
   { key: 'message', label: 'Message', icon: '✉️' },
   { key: 'dice', label: 'Critical Fail', icon: '🎲' },
+  { key: 'journal', label: 'Journal', icon: '📜' },
 ]
 
 function logout() {
@@ -43,6 +45,10 @@ onMounted(() => {
   socket.on('hp-updated', ({ playerId, newHp }) => {
     sessionStore.updatePlayerHp(playerId, newHp)
   })
+
+  socket.on('conditions-updated', ({ playerId, conditions }) => {
+    sessionStore.updatePlayerConditions(playerId, conditions)
+  })
 })
 
 watch(
@@ -61,6 +67,7 @@ onUnmounted(() => {
   socket.off('player-left')
   socket.off('players-snapshot')
   socket.off('hp-updated')
+  socket.off('conditions-updated')
 })
 </script>
 
@@ -97,6 +104,9 @@ onUnmounted(() => {
       </div>
       <div v-show="activeTab === 'dice'">
         <CriticalFailTool />
+      </div>
+      <div v-show="activeTab === 'journal'">
+        <SessionJournal />
       </div>
     </main>
   </div>

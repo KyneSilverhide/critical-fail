@@ -1,4 +1,6 @@
 <script setup>
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+
 const props = defineProps({
   message: {
     type: Object,
@@ -17,6 +19,47 @@ function formatTime(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+}
+
+// Typewriter effect
+const displayedText = ref('')
+let typewriterTimer = null
+
+function startTypewriter(text) {
+  if (typewriterTimer) clearInterval(typewriterTimer)
+  displayedText.value = ''
+  let i = 0
+  typewriterTimer = setInterval(() => {
+    if (i < text.length) {
+      displayedText.value += text[i]
+      i++
+    } else {
+      clearInterval(typewriterTimer)
+      typewriterTimer = null
+    }
+  }, 60)
+}
+
+onMounted(() => {
+  if (props.message.kind !== 'dice' && props.message.type !== 'image' && props.message.textEffect === 'typewriter') {
+    startTypewriter(props.message.content || '')
+  }
+})
+
+onUnmounted(() => {
+  if (typewriterTimer) {
+    clearInterval(typewriterTimer)
+    typewriterTimer = null
+  }
+})
+
+watch(() => props.message.content, (newVal) => {
+  if (props.message.textEffect === 'typewriter') startTypewriter(newVal || '')
+})
+
+function resolvedText() {
+  if (props.message.textEffect === 'typewriter') return displayedText.value
+  return props.message.content
 }
 </script>
 
@@ -43,12 +86,15 @@ function formatTime(dateStr) {
       <img :src="getImageUrl(message.content)" alt="Image du MJ" class="message-image" />
     </div>
 
-    <div v-else class="text-card">
+    <div v-else class="text-card" :class="[
+      'voice-' + (message.voiceStyle || 'normal'),
+      'effect-' + (message.textEffect || 'none'),
+    ]">
       <div class="card-header">
-        <span class="from-name">{{ message.fromName || 'MJ' }}</span>
+        <span class="from-name voice-label">{{ message.fromName || 'MJ' }}</span>
         <span class="card-time">{{ formatTime(message.sentAt) }}</span>
       </div>
-      <p class="message-text">{{ message.content }}</p>
+      <p class="message-text">{{ resolvedText() }}</p>
     </div>
   </div>
 </template>
@@ -154,6 +200,65 @@ function formatTime(dateStr) {
   color: var(--color-parchment);
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+/* ── Voice styles ───────────────────────────────────────────── */
+.voice-god .message-text {
+  font-family: var(--font-title);
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #f5e080;
+  text-shadow: 0 0 18px rgba(240,224,80,0.7), 0 2px 4px rgba(0,0,0,0.8);
+}
+.voice-god {
+  border-left: 3px solid #f5e080;
+  background: linear-gradient(160deg, #3a2e08, #201a04);
+}
+
+.voice-whisper .message-text {
+  font-style: italic;
+  font-size: 0.85rem;
+  color: #a0c4ff;
+  opacity: 0.8;
+  letter-spacing: 0.06em;
+}
+.voice-whisper {
+  border-left: 3px solid #a0c4ff;
+  background: linear-gradient(160deg, #0e1a2a, #080f1a);
+}
+
+.voice-demon .message-text {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  color: #ff4444;
+  text-shadow: 0 0 12px rgba(255,68,68,0.7), 0 2px 4px rgba(0,0,0,0.8);
+  letter-spacing: 0.08em;
+}
+.voice-demon {
+  border-left: 3px solid #cc2020;
+  background: linear-gradient(160deg, #2a0808, #1a0404);
+}
+
+/* ── Text effects ───────────────────────────────────────────── */
+.effect-slow .message-text {
+  animation: fadeSlow 3s ease-in;
+}
+@keyframes fadeSlow {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.effect-glitch .message-text {
+  animation: glitchText 0.5s steps(2) 3;
+}
+@keyframes glitchText {
+  0%   { clip-path: inset(0 0 90% 0); transform: translate(-3px, 0); }
+  20%  { clip-path: inset(30% 0 50% 0); transform: translate(3px, 0); }
+  40%  { clip-path: inset(60% 0 20% 0); transform: translate(-2px, 0); }
+  60%  { clip-path: inset(10% 0 80% 0); transform: translate(2px, 0); }
+  80%  { clip-path: inset(70% 0 5% 0); transform: translate(-1px, 0); }
+  100% { clip-path: inset(0 0 0 0); transform: translate(0, 0); }
 }
 
 .message-image {

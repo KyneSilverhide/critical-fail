@@ -26,6 +26,38 @@ const hpBarColor = computed(() => {
   return '#e03030'
 })
 
+// Conditions D&D 5e 2014
+const DND_CONDITIONS = [
+  { id: 'blinded', label: 'Aveuglé', icon: '👁️' },
+  { id: 'charmed', label: 'Charmé', icon: '💕' },
+  { id: 'deafened', label: 'Assourdi', icon: '🔇' },
+  { id: 'exhaustion', label: 'Épuisé', icon: '😴' },
+  { id: 'frightened', label: 'Effrayé', icon: '😱' },
+  { id: 'grappled', label: 'Agrippé', icon: '🤝' },
+  { id: 'incapacitated', label: 'Incapacité', icon: '🚫' },
+  { id: 'invisible', label: 'Invisible', icon: '👻' },
+  { id: 'paralyzed', label: 'Paralysé', icon: '⚡' },
+  { id: 'petrified', label: 'Pétrifié', icon: '🪨' },
+  { id: 'poisoned', label: 'Empoisonné', icon: '☠️' },
+  { id: 'prone', label: 'À terre', icon: '⬇️' },
+  { id: 'restrained', label: 'Entravé', icon: '⛓️' },
+  { id: 'stunned', label: 'Étourdi', icon: '💫' },
+  { id: 'unconscious', label: 'Inconscient', icon: '💤' },
+]
+
+const activeConditions = ref([])
+
+function toggleCondition(conditionId) {
+  const idx = activeConditions.value.indexOf(conditionId)
+  if (idx === -1) {
+    activeConditions.value.push(conditionId)
+  } else {
+    activeConditions.value.splice(idx, 1)
+  }
+  const socket = getSocket()
+  socket.emit('update-conditions', { conditions: activeConditions.value })
+}
+
 function adjustHp(delta) {
   pendingHp.value = Math.max(0, Math.min(maxHp.value, pendingHp.value + delta))
 }
@@ -125,6 +157,23 @@ onUnmounted(() => {
             @click="sendHpUpdate"
           >
             {{ hpSent ? '✓ Envoyé' : hpSending ? '…' : '📡 Mettre à jour' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Conditions Panel -->
+      <div class="conditions-panel">
+        <span class="conditions-label">⚡ Conditions</span>
+        <div class="conditions-grid">
+          <button
+            v-for="cond in DND_CONDITIONS"
+            :key="cond.id"
+            class="condition-btn"
+            :class="{ active: activeConditions.includes(cond.id) }"
+            @click="toggleCondition(cond.id)"
+          >
+            <span class="cond-icon">{{ cond.icon }}</span>
+            <span class="cond-label">{{ cond.label }}</span>
           </button>
         </div>
       </div>
@@ -249,4 +298,55 @@ onUnmounted(() => {
 .empty-text { font-family: var(--font-heading); font-size: 1rem; letter-spacing: 0.1em; color: var(--color-text-dim); text-align: center; }
 .empty-sub { font-family: var(--font-body); color: var(--color-border); font-size: 0.9rem; }
 .messages-list { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Conditions Panel */
+.conditions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.conditions-label {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.conditions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.condition-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 20px;
+  border: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.03);
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.condition-btn:hover {
+  border-color: #f0a500;
+  color: #f0a500;
+}
+
+.condition-btn.active {
+  border-color: #e03030;
+  background: rgba(224,48,48,0.15);
+  color: #ff6060;
+}
+
+.cond-icon { font-size: 0.85rem; }
+.cond-label { white-space: nowrap; }
 </style>

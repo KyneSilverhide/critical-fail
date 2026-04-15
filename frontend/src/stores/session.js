@@ -33,6 +33,11 @@ export const sessionStore = reactive({
     if (idx !== -1) this.players[idx] = { ...this.players[idx], current_hp: newHp }
   },
 
+  updatePlayerConditions(playerId, conditions) {
+    const idx = this.players.findIndex(p => String(p.id) === String(playerId))
+    if (idx !== -1) this.players[idx] = { ...this.players[idx], conditions }
+  },
+
   addMessage(msg) {
     this.messages.push(msg)
   },

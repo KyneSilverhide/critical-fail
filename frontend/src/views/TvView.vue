@@ -46,6 +46,33 @@ function avatarUrl(player) {
   return `${BACKEND_URL}${player.avatar_url}`
 }
 
+const CONDITION_LABELS = {
+  blinded: { label: 'Aveuglé', icon: '👁️' },
+  charmed: { label: 'Charmé', icon: '💕' },
+  deafened: { label: 'Assourdi', icon: '🔇' },
+  exhaustion: { label: 'Épuisé', icon: '😴' },
+  frightened: { label: 'Effrayé', icon: '😱' },
+  grappled: { label: 'Agrippé', icon: '🤝' },
+  incapacitated: { label: 'Incapacité', icon: '🚫' },
+  invisible: { label: 'Invisible', icon: '👻' },
+  paralyzed: { label: 'Paralysé', icon: '⚡' },
+  petrified: { label: 'Pétrifié', icon: '🪨' },
+  poisoned: { label: 'Empoisonné', icon: '☠️' },
+  prone: { label: 'À terre', icon: '⬇️' },
+  restrained: { label: 'Entravé', icon: '⛓️' },
+  stunned: { label: 'Étourdi', icon: '💫' },
+  unconscious: { label: 'Inconscient', icon: '💤' },
+}
+
+function parseConditions(player) {
+  try {
+    const raw = player.conditions
+    if (!raw) return []
+    const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return Array.isArray(arr) ? arr : []
+  } catch { return [] }
+}
+
 let socket = null
 
 onMounted(() => {
@@ -97,6 +124,13 @@ onMounted(() => {
         delete current[id]
         hpAnimations.value = current
       }, 2000)
+    }
+  })
+
+  socket.on('conditions-updated', ({ playerId, conditions }) => {
+    const idx = players.value.findIndex(p => String(p.id) === String(playerId))
+    if (idx !== -1) {
+      players.value[idx] = { ...players.value[idx], conditions }
     }
   })
 
@@ -190,6 +224,18 @@ onUnmounted(() => {
           <div class="card-footer">
             <span class="status-badge" :style="{ color: statusColor(player), borderColor: statusColor(player) }">
               {{ hpStatus(player) }}
+            </span>
+          </div>
+
+          <!-- Conditions -->
+          <div v-if="parseConditions(player).length > 0" class="conditions-row">
+            <span
+              v-for="cid in parseConditions(player)"
+              :key="cid"
+              class="condition-badge"
+              :title="CONDITION_LABELS[cid]?.label || cid"
+            >
+              {{ CONDITION_LABELS[cid]?.icon || '⚡' }} {{ CONDITION_LABELS[cid]?.label || cid }}
             </span>
           </div>
 
@@ -366,8 +412,8 @@ onUnmounted(() => {
 
 /* Avatar */
 .card-avatar {
-  width: 48px;
-  height: 48px;
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
   overflow: hidden;
   border: 2px solid var(--color-gold-dark);
@@ -384,7 +430,7 @@ onUnmounted(() => {
 }
 .avatar-fallback {
   font-family: var(--font-heading);
-  font-size: 1.3rem;
+  font-size: 2.2rem;
   color: var(--color-gold-dark);
   font-weight: 700;
   line-height: 1;
@@ -481,6 +527,28 @@ onUnmounted(() => {
   border-radius: 20px;
   padding: 0.15rem 0.5rem;
   background: rgba(0,0,0,0.2);
+}
+
+/* Conditions row */
+.conditions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.condition-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-family: var(--font-heading);
+  font-size: clamp(0.55rem, 1vw, 0.7rem);
+  letter-spacing: 0.05em;
+  color: #f0a500;
+  background: rgba(240,165,0,0.12);
+  border: 1px solid rgba(240,165,0,0.4);
+  border-radius: 20px;
+  padding: 0.15rem 0.45rem;
+  white-space: nowrap;
 }
 
 /* HP floating delta */
