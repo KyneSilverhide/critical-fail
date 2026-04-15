@@ -8,7 +8,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 // ── State ───────────────────────────────────────────────────────────────
 const merchants = ref([])
-const pendingRequests = ref([])
+const pendingRequests = ref([]) // normalized batch groups
 const loading = ref(false)
 const view = ref('list') // 'list' | 'create'
 
@@ -21,7 +21,6 @@ const creating = ref(false)
 // Respond dialog
 const respondingRequest = ref(null)
 const respondAction = ref('accept')
-const respondPrice = ref(0)
 
 const DND_PRESETS = [
   { name: 'Potion de soins', description: 'Récupère 2d4+2 PV', price: 50, stock: 5, category: 'Potions' },
@@ -59,7 +58,7 @@ async function loadMerchants() {
       }),
     ])
     if (mRes.ok) merchants.value = await mRes.json()
-    if (pRes.ok) pendingRequests.value = (await pRes.json()).filter(r => r.status === 'pending')
+    if (pRes.ok) pendingRequests.value = groupLoadedRequests((await pRes.json()).filter(r => r.status === 'pending'))
   } catch (err) {
     console.error(err)
   } finally {
@@ -99,21 +98,94 @@ function showOnTv(merchantId) {
   socket.emit('show-merchant', { sessionId: sessionStore.activeSession.id, merchantId })
 }
 
+function closeMerchant() {
+  const socket = getSocket()
+  socket.emit('close-merchant', { sessionId: sessionStore.activeSession.id })
+}
+
+// ── Normalize request data into batch groups ─────────────────────────────
+function normalizeRequest(data) {
+  // New batch format: has batch_id + items array
+  if (data.batch_id && Array.isArray(data.items)) {
+    return {
+      _key: data.batch_id,
+      batch_id: data.batch_id,
+      player_name: data.player_name,
+      player_id: data.player_id,
+      merchant_id: data.merchant_id,
+      items: data.items,
+      total_price: data.total_price,
+    }
+  }
+  // Legacy single-item format (from REST API or old socket events)
+  return {
+    _key: `single-${data.id}`,
+    batch_id: null,
+    id: data.id,
+    player_name: data.player_name,
+    player_id: data.player_id,
+    merchant_id: data.merchant_id,
+    items: [{
+      request_id: data.id,
+      item_name: data.item_name,
+      quantity: data.quantity,
+      unit_price: data.item_price,
+      total_price: data.base_price,
+    }],
+    total_price: data.base_price,
+  }
+}
+
+function groupLoadedRequests(rows) {
+  const groups = {}
+  for (const row of rows) {
+    const key = row.batch_id ? row.batch_id : `single-${row.id}`
+    if (!groups[key]) {
+      groups[key] = {
+        _key: key,
+        batch_id: row.batch_id || null,
+        id: row.id,
+        player_name: row.player_name,
+        player_id: row.player_id,
+        merchant_id: row.merchant_id,
+        items: [],
+        total_price: 0,
+      }
+    }
+    groups[key].items.push({
+      request_id: row.id,
+      item_name: row.item_name,
+      quantity: row.quantity,
+      unit_price: row.item_price,
+      total_price: row.base_price,
+    })
+    groups[key].total_price += row.base_price
+  }
+  return Object.values(groups)
+}
+
 // ── Purchase response ────────────────────────────────────────────────────
 function openRespond(req) {
   respondingRequest.value = req
   respondAction.value = 'accept'
-  respondPrice.value = req.base_price
 }
 
 function submitRespond() {
   if (!respondingRequest.value) return
   const socket = getSocket()
-  socket.emit('respond-purchase', {
-    requestId: respondingRequest.value.id,
-    action: respondAction.value,
-    finalPrice: respondPrice.value,
-  })
+  if (respondingRequest.value.batch_id) {
+    socket.emit('respond-batch-purchase', {
+      batchId: respondingRequest.value.batch_id,
+      action: respondAction.value,
+    })
+  } else {
+    // Legacy single item
+    socket.emit('respond-purchase', {
+      requestId: respondingRequest.value.id,
+      action: respondAction.value,
+      finalPrice: respondingRequest.value.total_price,
+    })
+  }
   respondingRequest.value = null
 }
 
@@ -133,15 +205,19 @@ function handleMerchantUpdated(data) {
 }
 
 function handlePurchaseRequest(data) {
-  pendingRequests.value.push(data)
+  pendingRequests.value.push(normalizeRequest(data))
 }
 
-function handlePurchaseResponded({ requestId }) {
-  pendingRequests.value = pendingRequests.value.filter(r => r.id !== requestId)
+function handlePurchaseResponded({ requestId, batchId }) {
+  if (batchId) {
+    pendingRequests.value = pendingRequests.value.filter(r => r.batch_id !== batchId)
+  } else {
+    pendingRequests.value = pendingRequests.value.filter(r => r._key !== `single-${requestId}`)
+  }
 }
 
 function handleCounterOfferResponse({ requestId }) {
-  pendingRequests.value = pendingRequests.value.filter(r => r.id !== requestId)
+  pendingRequests.value = pendingRequests.value.filter(r => r._key !== `single-${requestId}`)
 }
 
 onMounted(() => {
@@ -185,13 +261,17 @@ onUnmounted(() => {
     <!-- Pending purchase requests banner -->
     <div v-if="pendingRequests.length > 0" class="requests-banner">
       <p class="requests-title">🛒 Demandes d'achat en attente ({{ pendingRequests.length }})</p>
-      <div v-for="req in pendingRequests" :key="req.id" class="request-row">
-        <span class="request-info">
-          <strong>{{ req.player_name }}</strong> veut acheter
-          <strong>{{ req.item_name }}</strong>
-          × {{ req.quantity }}
-          — {{ req.base_price }} po
-        </span>
+      <div v-for="req in pendingRequests" :key="req._key" class="request-row">
+        <div class="request-info">
+          <strong class="request-player">{{ req.player_name }}</strong> souhaite acheter :
+          <ul class="request-items-list">
+            <li v-for="item in req.items" :key="item.request_id">
+              {{ item.item_name }} × {{ item.quantity }}
+              <span class="item-line-price">— {{ item.total_price }} po</span>
+            </li>
+          </ul>
+          <span class="request-total">Total : {{ req.total_price }} po</span>
+        </div>
         <button class="respond-btn" @click="openRespond(req)">Répondre</button>
       </div>
     </div>
@@ -259,7 +339,10 @@ onUnmounted(() => {
             <p class="merchant-card-name">{{ merchant.name }}</p>
             <p v-if="merchant.description" class="merchant-card-desc">{{ merchant.description }}</p>
           </div>
-          <button class="show-tv-btn" @click="showOnTv(merchant.id)">📺 Sur TV</button>
+          <div class="merchant-actions">
+            <button class="show-tv-btn" @click="showOnTv(merchant.id)">📺 Sur TV</button>
+            <button class="close-merchant-btn" @click="closeMerchant" title="Clôturer le marchand pour les joueurs">✕ Fermer</button>
+          </div>
         </div>
         <div class="merchant-items-preview">
           <div v-for="item in merchant.items" :key="item.id" class="preview-item">
@@ -278,12 +361,17 @@ onUnmounted(() => {
     <div v-if="respondingRequest" class="respond-overlay" @click.self="respondingRequest = null">
       <div class="respond-dialog">
         <h3 class="dialog-title">Répondre à la demande</h3>
-        <p class="dialog-info">
-          <strong>{{ respondingRequest.player_name }}</strong> souhaite acheter
-          <strong>{{ respondingRequest.item_name }}</strong>
-          × {{ respondingRequest.quantity }}
-          pour <strong>{{ respondingRequest.base_price }} po</strong>
+        <p class="dialog-player">
+          <strong>{{ respondingRequest.player_name }}</strong> souhaite acheter :
         </p>
+        <ul class="dialog-items-list">
+          <li v-for="item in respondingRequest.items" :key="item.request_id" class="dialog-item-row">
+            <span class="dialog-item-name">{{ item.item_name }}</span>
+            <span class="dialog-item-qty">× {{ item.quantity }}</span>
+            <span class="dialog-item-price">{{ item.total_price }} po</span>
+          </li>
+        </ul>
+        <div class="dialog-total">Total : <strong>{{ respondingRequest.total_price }} po</strong></div>
 
         <div class="respond-actions">
           <button
@@ -292,25 +380,10 @@ onUnmounted(() => {
             @click="respondAction = 'accept'"
           >✅ Accepter</button>
           <button
-            class="respond-action-btn discount"
-            :class="{ active: respondAction === 'discount' }"
-            @click="respondAction = 'discount'"
-          >💚 Ristourne</button>
-          <button
-            class="respond-action-btn increase"
-            :class="{ active: respondAction === 'increase' }"
-            @click="respondAction = 'increase'"
-          >📈 Augmenter</button>
-          <button
             class="respond-action-btn reject"
             :class="{ active: respondAction === 'reject' }"
             @click="respondAction = 'reject'"
           >❌ Refuser</button>
-        </div>
-
-        <div v-if="respondAction === 'discount' || respondAction === 'increase'" class="price-input-group">
-          <label class="form-label">Nouveau prix (po)</label>
-          <input v-model.number="respondPrice" type="number" class="form-input" min="0" />
         </div>
 
         <div class="dialog-footer">
@@ -388,7 +461,7 @@ onUnmounted(() => {
 }
 .request-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
   background: rgba(47,184,150,0.05);
@@ -402,7 +475,21 @@ onUnmounted(() => {
   color: var(--color-parchment);
   flex: 1;
 }
-.request-info strong { color: #2fb896; }
+.request-player { color: #2fb896; }
+.request-items-list {
+  margin: 0.3rem 0 0.3rem 1rem;
+  padding: 0;
+  list-style: disc;
+  color: var(--color-text-dim);
+  font-size: 0.8rem;
+}
+.item-line-price { color: var(--color-gold-dark); }
+.request-total {
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: var(--color-gold-bright);
+}
 .respond-btn {
   padding: 0.3rem 0.7rem;
   background: rgba(47,184,150,0.1);
@@ -544,6 +631,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.75rem;
 }
+.merchant-actions { display: flex; gap: 0.4rem; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 .merchant-card-name {
   font-family: var(--font-heading);
   font-size: 0.9rem;
@@ -571,6 +659,22 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .show-tv-btn:hover { background: rgba(137,196,255,0.18); border-color: #89c4ff; }
+
+.close-merchant-btn {
+  padding: 0.35rem 0.75rem;
+  background: rgba(200,48,48,0.08);
+  border: 1px solid rgba(200,48,48,0.4);
+  border-radius: 6px;
+  color: #ff6b6b;
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.close-merchant-btn:hover { background: rgba(200,48,48,0.2); border-color: #ff6b6b; }
 
 .merchant-items-preview {
   display: flex;
@@ -635,14 +739,42 @@ onUnmounted(() => {
   color: var(--color-gold-bright);
   margin: 0;
 }
-.dialog-info {
+.dialog-player {
   font-family: var(--font-body);
   font-size: 0.9rem;
   color: var(--color-text-dim);
   margin: 0;
-  line-height: 1.5;
 }
-.dialog-info strong { color: var(--color-parchment); }
+.dialog-player strong { color: #2fb896; }
+.dialog-items-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+.dialog-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+}
+.dialog-item-name { flex: 1; color: var(--color-parchment); }
+.dialog-item-qty { color: var(--color-text-dim); min-width: 40px; }
+.dialog-item-price { color: var(--color-gold-bright); min-width: 60px; text-align: right; }
+.dialog-total {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  color: var(--color-text-dim);
+  text-align: right;
+}
+.dialog-total strong { color: var(--color-gold-bright); font-size: 1rem; }
 
 .respond-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .respond-action-btn {
@@ -661,11 +793,7 @@ onUnmounted(() => {
   min-width: 80px;
 }
 .respond-action-btn.active { border-color: var(--color-gold-dark); color: var(--color-gold-bright); background: rgba(201,168,76,0.1); }
-.respond-action-btn.discount.active { border-color: #2fb896; color: #2fb896; background: rgba(47,184,150,0.1); }
-.respond-action-btn.increase.active { border-color: #f0a500; color: #f0a500; background: rgba(240,165,0,0.1); }
 .respond-action-btn.reject.active { border-color: #cc3030; color: #ff6060; background: rgba(200,48,48,0.1); }
-
-.price-input-group { display: flex; flex-direction: column; gap: 0.35rem; }
 
 .dialog-footer { display: flex; gap: 0.5rem; }
 .cancel-btn {

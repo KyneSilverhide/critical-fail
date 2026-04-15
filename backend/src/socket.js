@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken')
 const QRCode = require('qrcode')
+const crypto = require('crypto')
 const pool = require('./db')
 
 async function getMerchantData(merchantId) {
@@ -418,7 +419,7 @@ function setupSocket(io) {
       } catch (err) { console.error(err) }
     })
 
-    // ── Player: request purchase ────────────────────────────────────────────
+    // ── Player: request purchase (single item, legacy) ──────────────────────
     socket.on('request-purchase', async ({ itemId, quantity }) => {
       if (!socket.playerId || !socket.sessionId) return
       try {
@@ -437,20 +438,71 @@ function setupSocket(io) {
         )
         const request = pr.rows[0]
         const requestData = {
-          id: request.id, itemId, itemName: item.name, quantity: qty,
-          basePrice: request.base_price, playerName, playerId: socket.playerId,
+          id: request.id, item_id: itemId, item_name: item.name, quantity: qty,
+          base_price: request.base_price, player_name: playerName, player_id: socket.playerId,
         }
         io.to(`admin:${socket.sessionId}`).emit('purchase-request', requestData)
         socket.emit('purchase-requested', { requestId: request.id, itemId, itemName: item.name })
       } catch (err) { console.error(err) }
     })
 
-    // ── Admin: respond to purchase ──────────────────────────────────────────
+    // ── Player: request batch purchase (cart) ───────────────────────────────
+    socket.on('request-batch-purchase', async ({ items }) => {
+      if (!socket.playerId || !socket.sessionId) return
+      if (!Array.isArray(items) || items.length === 0) {
+        socket.emit('purchase-error', { message: 'Panier vide.' }); return
+      }
+      try {
+        const pname = await pool.query('SELECT player_name FROM players WHERE id = $1', [socket.playerId])
+        const playerName = pname.rows[0]?.player_name || 'Inconnu'
+        const batchId = crypto.randomUUID()
+        const batchItems = []
+        let totalPrice = 0
+        let merchantId = null
+        for (const { itemId, quantity } of items) {
+          const itemRes = await pool.query('SELECT * FROM merchant_items WHERE id = $1', [itemId])
+          const item = itemRes.rows[0]
+          if (!item) continue
+          const qty = Math.max(1, parseInt(quantity) || 1)
+          if (item.stock !== -1 && item.stock < qty) continue
+          const linePrice = item.price * qty
+          totalPrice += linePrice
+          merchantId = item.merchant_id
+          const pr = await pool.query(
+            'INSERT INTO purchase_requests (session_id, merchant_id, item_id, player_id, player_name, quantity, base_price, status, batch_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+            [socket.sessionId, item.merchant_id, itemId, socket.playerId, playerName, qty, linePrice, 'pending', batchId]
+          )
+          batchItems.push({
+            request_id: pr.rows[0].id,
+            item_id: itemId,
+            item_name: item.name,
+            quantity: qty,
+            unit_price: item.price,
+            total_price: linePrice,
+          })
+        }
+        if (batchItems.length === 0) {
+          socket.emit('purchase-error', { message: 'Aucun article disponible dans votre panier.' }); return
+        }
+        const requestData = {
+          batch_id: batchId,
+          merchant_id: merchantId,
+          player_name: playerName,
+          player_id: socket.playerId,
+          items: batchItems,
+          total_price: totalPrice,
+        }
+        io.to(`admin:${socket.sessionId}`).emit('purchase-request', requestData)
+        socket.emit('purchase-requested', { batchId, items: batchItems })
+      } catch (err) { console.error(err); socket.emit('purchase-error', { message: 'Erreur lors de la demande.' }) }
+    })
+
+    // ── Admin: respond to purchase (single legacy item) ─────────────────────
     socket.on('respond-purchase', async ({ requestId, action, finalPrice }) => {
       if (!socket.admin) return
       try {
         const reqRes = await pool.query(
-          `SELECT pr.*, mi.stock AS item_stock
+          `SELECT pr.*, mi.stock AS item_stock, mi.name AS item_name
            FROM purchase_requests pr JOIN merchant_items mi ON pr.item_id = mi.id
            WHERE pr.id = $1`,
           [requestId]
@@ -468,7 +520,8 @@ function setupSocket(io) {
             )
           }
           await pool.query('UPDATE purchase_requests SET status = $1, final_price = $2 WHERE id = $3', ['accepted', req.base_price, requestId])
-          if (playerSocketId) io.to(playerSocketId).emit('purchase-accepted', { requestId, itemName: req.item_name, finalPrice: req.base_price })
+          const items = [{ item_name: req.item_name, quantity: req.quantity, total_price: req.base_price }]
+          if (playerSocketId) io.to(playerSocketId).emit('batch-accepted', { items, totalPrice: req.base_price })
           const merchantData = await getMerchantData(req.merchant_id)
           socket.emit('merchant-updated', merchantData)
           io.to(`tv:${req.session_id}`).emit('merchant-items-updated', merchantData)
@@ -479,9 +532,65 @@ function setupSocket(io) {
           if (playerSocketId) io.to(playerSocketId).emit('purchase-counter-offer', { requestId, action, finalPrice: fp, itemName: req.item_name })
         } else if (action === 'reject') {
           await pool.query('UPDATE purchase_requests SET status = $1 WHERE id = $2', ['rejected', requestId])
-          if (playerSocketId) io.to(playerSocketId).emit('purchase-rejected', { requestId, itemName: req.item_name })
+          const items = [{ item_name: req.item_name, quantity: req.quantity, total_price: req.base_price }]
+          if (playerSocketId) io.to(playerSocketId).emit('batch-rejected', { items })
         }
         socket.emit('purchase-responded', { requestId, action })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: respond to batch purchase ────────────────────────────────────
+    socket.on('respond-batch-purchase', async ({ batchId, action }) => {
+      if (!socket.admin) return
+      try {
+        const reqsRes = await pool.query(
+          `SELECT pr.*, mi.stock AS item_stock, mi.name AS item_name
+           FROM purchase_requests pr JOIN merchant_items mi ON pr.item_id = mi.id
+           WHERE pr.batch_id = $1 AND pr.status = 'pending'`,
+          [batchId]
+        )
+        const reqs = reqsRes.rows
+        if (reqs.length === 0) return
+        const playerSocketRes = await pool.query('SELECT socket_id FROM players WHERE id = $1', [reqs[0].player_id])
+        const playerSocketId = playerSocketRes.rows[0]?.socket_id
+
+        if (action === 'accept') {
+          let totalFinal = 0
+          for (const req of reqs) {
+            if (req.item_stock !== -1) {
+              await pool.query('UPDATE merchant_items SET stock = GREATEST(0, stock - $1) WHERE id = $2', [req.quantity, req.item_id])
+            }
+            await pool.query('UPDATE purchase_requests SET status = $1, final_price = $2 WHERE id = $3', ['accepted', req.base_price, req.id])
+            totalFinal += req.base_price
+          }
+          const items = reqs.map(r => ({ item_name: r.item_name, quantity: r.quantity, total_price: r.base_price }))
+          if (playerSocketId) io.to(playerSocketId).emit('batch-accepted', { batchId, items, totalPrice: totalFinal })
+          const merchantData = await getMerchantData(reqs[0].merchant_id)
+          socket.emit('merchant-updated', merchantData)
+          io.to(`tv:${reqs[0].session_id}`).emit('merchant-items-updated', merchantData)
+          io.to(`session:${reqs[0].session_id}`).emit('merchant-items-updated', merchantData)
+        } else if (action === 'reject') {
+          for (const req of reqs) {
+            await pool.query('UPDATE purchase_requests SET status = $1 WHERE id = $2', ['rejected', req.id])
+          }
+          const items = reqs.map(r => ({ item_name: r.item_name, quantity: r.quantity, total_price: r.base_price }))
+          if (playerSocketId) io.to(playerSocketId).emit('batch-rejected', { batchId, items })
+        }
+        socket.emit('purchase-responded', { batchId, action })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: close merchant ────────────────────────────────────────────────
+    socket.on('close-merchant', async ({ sessionId }) => {
+      if (!socket.admin) return
+      try {
+        await pool.query(
+          "UPDATE sessions SET tv_mode = 'lobby', current_merchant_id = NULL WHERE id = $1 AND created_by = $2",
+          [sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'lobby' })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'lobby' })
+        io.to(`session:${sessionId}`).emit('merchant-closed')
       } catch (err) { console.error(err) }
     })
 
