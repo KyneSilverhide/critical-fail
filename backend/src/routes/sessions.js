@@ -9,7 +9,7 @@ const crypto = require('crypto')
 
 async function generateUniqueCode(pool) {
   for (let i = 0; i < 10; i++) {
-    const code = (10000000 + crypto.randomInt(0, 90000000)).toString()
+    const code = (10000000 + crypto.randomInt(90000000)).toString()
     const exists = await pool.query('SELECT id FROM sessions WHERE code = $1', [code])
     if (!exists.rows[0]) return code
   }
