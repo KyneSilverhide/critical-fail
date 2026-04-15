@@ -50,6 +50,21 @@ CREATE TABLE IF NOT EXISTS dice_results (
   sent_to INTEGER REFERENCES players(id),
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_style VARCHAR(20) DEFAULT 'normal';
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS text_effect VARCHAR(20) DEFAULT 'none';
+
+ALTER TABLE players ADD COLUMN IF NOT EXISTS conditions TEXT DEFAULT '[]';
+
+CREATE TABLE IF NOT EXISTS session_events (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  event_type VARCHAR(50) NOT NULL,
+  description TEXT NOT NULL,
+  player_name VARCHAR(100),
+  value INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
 `
 
 async function runMigrations() {

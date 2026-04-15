@@ -89,4 +89,45 @@ router.patch('/:id/close', authenticateToken, async (req, res) => {
   }
 })
 
+router.get('/:id/journal', authenticateToken, async (req, res) => {
+  try {
+    const sessionCheck = await pool.query(
+      'SELECT id, created_at FROM sessions WHERE id = $1 AND created_by = $2',
+      [req.params.id, req.admin.id]
+    )
+    if (!sessionCheck.rows[0]) return res.status(404).json({ error: 'Session not found.' })
+
+    const events = await pool.query(
+      'SELECT * FROM session_events WHERE session_id = $1 ORDER BY created_at ASC',
+      [req.params.id]
+    )
+
+    const rows = events.rows
+    const damages = rows.filter(e => e.event_type === 'damage')
+    const heals = rows.filter(e => e.event_type === 'heal')
+    const deaths = rows.filter(e => e.event_type === 'death')
+    const totalDamage = damages.reduce((sum, e) => sum + Math.abs(e.value || 0), 0)
+    const totalHeal = heals.reduce((sum, e) => sum + Math.abs(e.value || 0), 0)
+
+    const sessionStart = sessionCheck.rows[0].created_at
+    const lastEvent = rows.length ? rows[rows.length - 1].created_at : new Date()
+    const durationMs = new Date(lastEvent) - new Date(sessionStart)
+    const durationMin = Math.round(durationMs / 60000)
+
+    const summary = [
+      `📜 Résumé de session`,
+      `⏱️ Durée : ${durationMin} min`,
+      `💥 Dégâts totaux : ${totalDamage} PV`,
+      `💚 Soins totaux : ${totalHeal} PV`,
+      `💀 Morts : ${deaths.length}`,
+      deaths.length ? `   ${deaths.map(d => d.player_name).join(', ')}` : '',
+    ].filter(Boolean).join('\n')
+
+    res.json({ events: rows, summary })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error.' })
+  }
+})
+
 module.exports = router

@@ -10,6 +10,8 @@ const selectedPlayerId = ref('all')
 const messageText = ref('')
 const imageFile = ref(null)
 const messageType = ref('text')
+const voiceStyle = ref('normal')
+const textEffect = ref('none')
 const sending = ref(false)
 const feedback = ref('')
 
@@ -82,6 +84,8 @@ async function sendMessage() {
       toPlayerId: selectedPlayerId.value === 'all' ? null : parseInt(selectedPlayerId.value),
       type: messageType.value,
       content,
+      voiceStyle: voiceStyle.value,
+      textEffect: textEffect.value,
     })
 
     feedback.value = 'Message envoyé !'
@@ -129,6 +133,26 @@ async function sendMessage() {
             :class="{ active: messageType === 'image' }"
             @click="messageType = 'image'"
           >Image</button>
+        </div>
+      </div>
+
+      <div class="form-group" v-if="messageType === 'text'">
+        <label class="form-label">Voix</label>
+        <div class="type-toggle">
+          <button class="toggle-btn" :class="{ active: voiceStyle === 'normal' }" @click="voiceStyle = 'normal'">Normale</button>
+          <button class="toggle-btn voice-god" :class="{ active: voiceStyle === 'god' }" @click="voiceStyle = 'god'">⚡ Dieu</button>
+          <button class="toggle-btn voice-whisper" :class="{ active: voiceStyle === 'whisper' }" @click="voiceStyle = 'whisper'">🌫 Murmure</button>
+          <button class="toggle-btn voice-demon" :class="{ active: voiceStyle === 'demon' }" @click="voiceStyle = 'demon'">👿 Démon</button>
+        </div>
+      </div>
+
+      <div class="form-group" v-if="messageType === 'text'">
+        <label class="form-label">Effet</label>
+        <div class="type-toggle">
+          <button class="toggle-btn" :class="{ active: textEffect === 'none' }" @click="textEffect = 'none'">Aucun</button>
+          <button class="toggle-btn" :class="{ active: textEffect === 'slow' }" @click="textEffect = 'slow'">🕰 Lent</button>
+          <button class="toggle-btn" :class="{ active: textEffect === 'glitch' }" @click="textEffect = 'glitch'">⚡ Glitch</button>
+          <button class="toggle-btn" :class="{ active: textEffect === 'typewriter' }" @click="textEffect = 'typewriter'">⌨ Frappe</button>
         </div>
       </div>
 
@@ -242,6 +266,22 @@ async function sendMessage() {
   border-color: var(--color-gold-dark);
   color: var(--color-gold-bright);
   background: rgba(201,168,76,0.08);
+}
+
+.toggle-btn.voice-god.active {
+  border-color: #f0e080;
+  color: #f0e080;
+  background: rgba(240,224,128,0.1);
+}
+.toggle-btn.voice-whisper.active {
+  border-color: #a0c4ff;
+  color: #a0c4ff;
+  background: rgba(160,196,255,0.08);
+}
+.toggle-btn.voice-demon.active {
+  border-color: #cc3030;
+  color: #ff6060;
+  background: rgba(200,48,48,0.12);
 }
 
 .feedback {

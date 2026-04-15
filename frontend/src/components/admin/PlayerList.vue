@@ -12,6 +12,33 @@ function hpColor(player) {
   if (pct > 20) return '#f0a500'
   return '#e03030'
 }
+
+const CONDITION_LABELS = {
+  blinded: { label: 'Aveuglé', icon: '👁️' },
+  charmed: { label: 'Charmé', icon: '💕' },
+  deafened: { label: 'Assourdi', icon: '🔇' },
+  exhaustion: { label: 'Épuisé', icon: '😴' },
+  frightened: { label: 'Effrayé', icon: '😱' },
+  grappled: { label: 'Agrippé', icon: '🤝' },
+  incapacitated: { label: 'Incapacité', icon: '🚫' },
+  invisible: { label: 'Invisible', icon: '👻' },
+  paralyzed: { label: 'Paralysé', icon: '⚡' },
+  petrified: { label: 'Pétrifié', icon: '🪨' },
+  poisoned: { label: 'Empoisonné', icon: '☠️' },
+  prone: { label: 'À terre', icon: '⬇️' },
+  restrained: { label: 'Entravé', icon: '⛓️' },
+  stunned: { label: 'Étourdi', icon: '💫' },
+  unconscious: { label: 'Inconscient', icon: '💤' },
+}
+
+function parseConditions(player) {
+  try {
+    const raw = player.conditions
+    if (!raw) return []
+    const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return Array.isArray(arr) ? arr : []
+  } catch { return [] }
+}
 </script>
 
 <template>
@@ -35,6 +62,13 @@ function hpColor(player) {
           <div class="hp-bar-fill"
             :style="{ width: hpPercent(player) + '%', background: hpColor(player) }"
           />
+        </div>
+        <div v-if="parseConditions(player).length > 0" class="conditions-row">
+          <span
+            v-for="cid in parseConditions(player)"
+            :key="cid"
+            class="condition-badge"
+          >{{ CONDITION_LABELS[cid]?.icon || '⚡' }} {{ CONDITION_LABELS[cid]?.label || cid }}</span>
         </div>
       </div>
     </div>
@@ -84,4 +118,26 @@ function hpColor(player) {
 
 .hp-bar-track { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
 .hp-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease, background 0.5s ease; }
+
+.conditions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.condition-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  color: #f0a500;
+  background: rgba(240,165,0,0.12);
+  border: 1px solid rgba(240,165,0,0.4);
+  border-radius: 20px;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+}
 </style>
