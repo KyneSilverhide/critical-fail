@@ -2,6 +2,17 @@ const jwt = require('jsonwebtoken')
 const QRCode = require('qrcode')
 const pool = require('./db')
 
+async function getMerchantData(merchantId) {
+  const mr = await pool.query('SELECT * FROM merchants WHERE id = $1', [merchantId])
+  const merchant = mr.rows[0]
+  if (!merchant) return null
+  const items = await pool.query(
+    'SELECT * FROM merchant_items WHERE merchant_id = $1 ORDER BY category, name',
+    [merchantId]
+  )
+  return { ...merchant, items: items.rows }
+}
+
 function setupSocket(io) {
   io.use((socket, next) => {
     const token = socket.handshake.auth.token
@@ -66,6 +77,9 @@ function setupSocket(io) {
         socket.emit('session-joined', {
           session: { id: session.id, name: session.name, code: session.code },
           player: { id: player.id, player_name: player.player_name, ac: player.ac, max_hp: player.max_hp, current_hp: player.current_hp, dnd_class: player.dnd_class, avatar_url: player.avatar_url },
+          activeMerchant: (session.current_merchant_id && session.tv_mode === 'merchant')
+            ? await getMerchantData(session.current_merchant_id)
+            : null,
         })
         io.to(`admin:${session.id}`).emit('player-joined', player)
         io.to(`tv:${session.id}`).emit('player-joined', player)
@@ -211,7 +225,10 @@ function setupSocket(io) {
           sessionCode: session.code,
           qrCodeDataUrl,
           currentImageUrl: session.current_image_url,
-          activeVote
+          activeVote,
+          activeMerchant: (session.current_merchant_id && session.tv_mode === 'merchant')
+            ? await getMerchantData(session.current_merchant_id)
+            : null,
         })
       } catch (err) { console.error(err) }
     })
@@ -322,14 +339,14 @@ function setupSocket(io) {
     })
 
     // ── Admin: send message ─────────────────────────────────────────────────
-    socket.on('send-message', async ({ sessionId, toPlayerId, type, content, voiceStyle, textEffect }) => {
+    socket.on('send-message', async ({ sessionId, toPlayerId, type, content, voiceStyle, textEffect, authorName }) => {
       if (!socket.admin) return
       try {
         if (!toPlayerId) {
           const cnt = await pool.query('SELECT COUNT(*)::int AS total FROM players WHERE session_id = $1', [sessionId])
           if ((cnt.rows[0]?.total || 0) === 0) { socket.emit('send-error', { message: 'Aucun joueur connecté.' }); return }
         }
-        const fromName = socket.admin.username
+        const fromName = (authorName && authorName.trim()) ? authorName.trim() : socket.admin.username
         const vStyle = voiceStyle || 'normal'
         const tEffect = textEffect || 'none'
         await pool.query('INSERT INTO messages (session_id, from_name, to_player_id, type, content, voice_style, text_effect) VALUES ($1, $2, $3, $4, $5, $6, $7)',
@@ -365,6 +382,142 @@ function setupSocket(io) {
     })
 
     socket.on('disconnect', async () => { await removePlayer(socket) })
+
+    // ── Admin: create merchant ──────────────────────────────────────────────
+    socket.on('create-merchant', async ({ sessionId, name, description, items }) => {
+      if (!socket.admin) return
+      try {
+        const mr = await pool.query(
+          'INSERT INTO merchants (session_id, name, description) VALUES ($1, $2, $3) RETURNING *',
+          [sessionId, name, description || '']
+        )
+        const merchant = mr.rows[0]
+        for (const item of (items || [])) {
+          await pool.query(
+            'INSERT INTO merchant_items (merchant_id, name, description, price, stock, category) VALUES ($1, $2, $3, $4, $5, $6)',
+            [merchant.id, item.name, item.description || '', item.price, item.stock ?? -1, item.category || 'Divers']
+          )
+        }
+        const merchantData = await getMerchantData(merchant.id)
+        socket.emit('merchant-created', merchantData)
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: show merchant on TV ──────────────────────────────────────────
+    socket.on('show-merchant', async ({ sessionId, merchantId }) => {
+      if (!socket.admin) return
+      try {
+        await pool.query(
+          'UPDATE sessions SET tv_mode = $1, current_merchant_id = $2 WHERE id = $3 AND created_by = $4',
+          ['merchant', merchantId, sessionId, socket.admin.id]
+        )
+        const merchantData = await getMerchantData(merchantId)
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'merchant', merchantData })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'merchant', merchantData })
+        io.to(`session:${sessionId}`).emit('merchant-shown', merchantData)
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Player: request purchase ────────────────────────────────────────────
+    socket.on('request-purchase', async ({ itemId, quantity }) => {
+      if (!socket.playerId || !socket.sessionId) return
+      try {
+        const itemRes = await pool.query('SELECT * FROM merchant_items WHERE id = $1', [itemId])
+        const item = itemRes.rows[0]
+        if (!item) { socket.emit('purchase-error', { message: 'Objet introuvable.' }); return }
+        const qty = Math.max(1, parseInt(quantity) || 1)
+        if (item.stock !== -1 && item.stock < qty) {
+          socket.emit('purchase-error', { message: 'Stock insuffisant.' }); return
+        }
+        const pname = await pool.query('SELECT player_name FROM players WHERE id = $1', [socket.playerId])
+        const playerName = pname.rows[0]?.player_name || 'Inconnu'
+        const pr = await pool.query(
+          'INSERT INTO purchase_requests (session_id, merchant_id, item_id, player_id, player_name, quantity, base_price, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+          [socket.sessionId, item.merchant_id, itemId, socket.playerId, playerName, qty, item.price * qty, 'pending']
+        )
+        const request = pr.rows[0]
+        const requestData = {
+          id: request.id, itemId, itemName: item.name, quantity: qty,
+          basePrice: request.base_price, playerName, playerId: socket.playerId,
+        }
+        io.to(`admin:${socket.sessionId}`).emit('purchase-request', requestData)
+        socket.emit('purchase-requested', { requestId: request.id, itemId, itemName: item.name })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: respond to purchase ──────────────────────────────────────────
+    socket.on('respond-purchase', async ({ requestId, action, finalPrice }) => {
+      if (!socket.admin) return
+      try {
+        const reqRes = await pool.query(
+          `SELECT pr.*, mi.stock AS item_stock
+           FROM purchase_requests pr JOIN merchant_items mi ON pr.item_id = mi.id
+           WHERE pr.id = $1`,
+          [requestId]
+        )
+        const req = reqRes.rows[0]
+        if (!req || req.status !== 'pending') return
+        const playerSocketRes = await pool.query('SELECT socket_id FROM players WHERE id = $1', [req.player_id])
+        const playerSocketId = playerSocketRes.rows[0]?.socket_id
+
+        if (action === 'accept') {
+          if (req.item_stock !== -1) {
+            await pool.query(
+              'UPDATE merchant_items SET stock = GREATEST(0, stock - $1) WHERE id = $2',
+              [req.quantity, req.item_id]
+            )
+          }
+          await pool.query('UPDATE purchase_requests SET status = $1, final_price = $2 WHERE id = $3', ['accepted', req.base_price, requestId])
+          if (playerSocketId) io.to(playerSocketId).emit('purchase-accepted', { requestId, itemName: req.item_name, finalPrice: req.base_price })
+          const merchantData = await getMerchantData(req.merchant_id)
+          socket.emit('merchant-updated', merchantData)
+          io.to(`tv:${req.session_id}`).emit('merchant-items-updated', merchantData)
+          io.to(`session:${req.session_id}`).emit('merchant-items-updated', merchantData)
+        } else if (action === 'discount' || action === 'increase') {
+          const fp = Math.max(0, parseInt(finalPrice) || req.base_price)
+          await pool.query('UPDATE purchase_requests SET status = $1, final_price = $2 WHERE id = $3', [action, fp, requestId])
+          if (playerSocketId) io.to(playerSocketId).emit('purchase-counter-offer', { requestId, action, finalPrice: fp, itemName: req.item_name })
+        } else if (action === 'reject') {
+          await pool.query('UPDATE purchase_requests SET status = $1 WHERE id = $2', ['rejected', requestId])
+          if (playerSocketId) io.to(playerSocketId).emit('purchase-rejected', { requestId, itemName: req.item_name })
+        }
+        socket.emit('purchase-responded', { requestId, action })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Player: respond to counter offer ────────────────────────────────────
+    socket.on('respond-counter-offer', async ({ requestId, accept }) => {
+      if (!socket.playerId || !socket.sessionId) return
+      try {
+        const reqRes = await pool.query(
+          `SELECT pr.*, mi.stock AS item_stock
+           FROM purchase_requests pr JOIN merchant_items mi ON pr.item_id = mi.id
+           WHERE pr.id = $1 AND pr.player_id = $2`,
+          [requestId, socket.playerId]
+        )
+        const req = reqRes.rows[0]
+        if (!req || !['discount', 'increase'].includes(req.status)) return
+
+        if (accept) {
+          if (req.item_stock !== -1) {
+            await pool.query(
+              'UPDATE merchant_items SET stock = GREATEST(0, stock - $1) WHERE id = $2',
+              [req.quantity, req.item_id]
+            )
+          }
+          await pool.query('UPDATE purchase_requests SET status = $1 WHERE id = $2', ['accepted', requestId])
+          socket.emit('counter-offer-result', { requestId, accepted: true, itemName: req.item_name, finalPrice: req.final_price })
+          const merchantData = await getMerchantData(req.merchant_id)
+          io.to(`admin:${socket.sessionId}`).emit('merchant-updated', merchantData)
+          io.to(`tv:${socket.sessionId}`).emit('merchant-items-updated', merchantData)
+          io.to(`session:${socket.sessionId}`).emit('merchant-items-updated', merchantData)
+        } else {
+          await pool.query('UPDATE purchase_requests SET status = $1 WHERE id = $2', ['declined', requestId])
+          socket.emit('counter-offer-result', { requestId, accepted: false, itemName: req.item_name })
+        }
+        io.to(`admin:${socket.sessionId}`).emit('counter-offer-response', { requestId, accepted: accept, playerName: req.player_name })
+      } catch (err) { console.error(err) }
+    })
   })
 }
 

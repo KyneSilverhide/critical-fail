@@ -7,11 +7,13 @@ export const sessionStore = reactive({
   messages: [],
   qrCodes: {},
   playerInfo: null,
+  activeMerchant: null,
 
   setActiveSession(session) {
     this.activeSession = session
     this.players = []
     this.messages = []
+    this.activeMerchant = null
   },
 
   addPlayer(player) {

@@ -1,5 +1,7 @@
 const express = require('express')
 const QRCode = require('qrcode')
+const path = require('path')
+const fs = require('fs').promises
 const pool = require('../db')
 const { authenticateToken } = require('../middleware/auth')
 
@@ -94,6 +96,20 @@ router.patch('/:id/close', authenticateToken, async (req, res) => {
       [req.params.id, req.admin.id]
     )
     if (!result.rows[0]) return res.status(404).json({ error: 'Session not found.' })
+
+    // Clean up session images: delete files and DB records
+    try {
+      const imagesRes = await pool.query('SELECT url FROM session_images WHERE session_id = $1', [req.params.id])
+      for (const img of imagesRes.rows) {
+        const filename = path.basename(img.url)
+        const filePath = path.join(__dirname, '../../uploads', filename)
+        await fs.unlink(filePath).catch(() => {})
+      }
+      await pool.query('DELETE FROM session_images WHERE session_id = $1', [req.params.id])
+    } catch (cleanErr) {
+      console.error('Error cleaning session images:', cleanErr)
+    }
+
     res.json(result.rows[0])
   } catch (err) {
     console.error(err)
@@ -149,6 +165,55 @@ router.get('/:id/images', authenticateToken, async (req, res) => {
       [req.params.id]
     )
     res.json(result.rows)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error.' })
+  }
+})
+
+router.get('/:id/merchants', authenticateToken, async (req, res) => {
+  try {
+    const sessionCheck = await pool.query(
+      'SELECT id FROM sessions WHERE id = $1 AND created_by = $2',
+      [req.params.id, req.admin.id]
+    )
+    if (!sessionCheck.rows[0]) return res.status(404).json({ error: 'Session not found.' })
+
+    const merchants = await pool.query(
+      'SELECT * FROM merchants WHERE session_id = $1 ORDER BY created_at DESC',
+      [req.params.id]
+    )
+    const result = await Promise.all(merchants.rows.map(async (m) => {
+      const items = await pool.query(
+        'SELECT * FROM merchant_items WHERE merchant_id = $1 ORDER BY category, name',
+        [m.id]
+      )
+      return { ...m, items: items.rows }
+    }))
+    res.json(result)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error.' })
+  }
+})
+
+router.get('/:id/purchase-requests', authenticateToken, async (req, res) => {
+  try {
+    const sessionCheck = await pool.query(
+      'SELECT id FROM sessions WHERE id = $1 AND created_by = $2',
+      [req.params.id, req.admin.id]
+    )
+    if (!sessionCheck.rows[0]) return res.status(404).json({ error: 'Session not found.' })
+
+    const requests = await pool.query(
+      `SELECT pr.*, mi.name AS item_name, mi.price AS item_price
+       FROM purchase_requests pr
+       JOIN merchant_items mi ON pr.item_id = mi.id
+       WHERE pr.session_id = $1
+       ORDER BY pr.created_at DESC`,
+      [req.params.id]
+    )
+    res.json(requests.rows)
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Server error.' })

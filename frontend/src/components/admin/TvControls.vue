@@ -2,8 +2,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { sessionStore } from '../../stores/session.js'
 import { getSocket } from '../../socket.js'
-import VoteManager from './VoteManager.vue'
-import ImageManager from './ImageManager.vue'
 
 const tvMode = ref('lobby')
 
@@ -52,16 +50,6 @@ onUnmounted(() => {
           ⚔️ Combat
         </button>
       </div>
-    </section>
-
-    <!-- Vote section -->
-    <section class="control-section">
-      <VoteManager />
-    </section>
-
-    <!-- Image section -->
-    <section class="control-section">
-      <ImageManager />
     </section>
   </div>
 </template>

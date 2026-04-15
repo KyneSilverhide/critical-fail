@@ -14,6 +14,7 @@ const qrCodeDataUrl = ref(null)
 const sessionCode = ref('')
 const currentImageUrl = ref(null)
 const activeVote = ref(null)
+const activeMerchant = ref(null)
 
 // Track HP change animations per player: { id -> { type: 'damage'|'heal', delta: number, key: number } }
 const hpAnimations = ref({})
@@ -45,10 +46,15 @@ function statusColor(player) {
   return '#2fb896'
 }
 
+function resolveMediaUrl(url) {
+  if (!url) return ''
+  if (url.startsWith('http')) return url
+  return `${BACKEND_URL}${url}`
+}
+
 function avatarUrl(player) {
   if (!player.avatar_url) return null
-  if (player.avatar_url.startsWith('http')) return player.avatar_url
-  return `${BACKEND_URL}${player.avatar_url}`
+  return resolveMediaUrl(player.avatar_url)
 }
 
 const CONDITION_LABELS = {
@@ -108,12 +114,14 @@ onMounted(() => {
     sessionCode.value = data.sessionCode || ''
     currentImageUrl.value = data.currentImageUrl || null
     activeVote.value = data.activeVote || null
+    activeMerchant.value = data.activeMerchant || null
     data.players.forEach(pl => { previousHp.value[pl.id] = pl.current_hp })
   })
 
-  socket.on('tv-mode-changed', ({ mode, imageUrl }) => {
+  socket.on('tv-mode-changed', ({ mode, imageUrl, merchantData }) => {
     tvMode.value = mode
     if (imageUrl) currentImageUrl.value = imageUrl
+    if (merchantData) activeMerchant.value = merchantData
   })
 
   socket.on('vote-started', (voteData) => {
@@ -182,6 +190,10 @@ onMounted(() => {
   socket.on('error', ({ message }) => {
     connectionError.value = message
   })
+
+  socket.on('merchant-items-updated', (merchantData) => {
+    activeMerchant.value = merchantData
+  })
 })
 
 onUnmounted(() => {
@@ -205,14 +217,12 @@ onUnmounted(() => {
 
     <!-- Main TV display -->
     <template v-else>
-      <header class="tv-header">
-        <div class="header-ornament">⚔</div>
-        <h1 class="session-title">{{ session.name }}</h1>
-        <p class="party-label">Groupe d'Aventuriers</p>
-      </header>
-
-      <!-- Lobby mode: QR code + session code -->
+      <!-- Lobby mode: session title + QR code + session code -->
       <div v-if="tvMode === 'lobby'" class="lobby-display">
+        <header class="tv-header">
+          <div class="header-ornament">⚔</div>
+          <h1 class="session-title">{{ session.name }}</h1>
+        </header>
         <p class="lobby-title">Rejoignez la partie !</p>
         <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" alt="QR Code" class="lobby-qr" />
         <div class="lobby-code">{{ sessionCode }}</div>
@@ -337,7 +347,34 @@ onUnmounted(() => {
 
       <!-- Image mode -->
       <div v-else-if="tvMode === 'image'" class="image-display">
-        <img :src="currentImageUrl" class="tv-image" alt="Image affichée" />
+        <img :src="resolveMediaUrl(currentImageUrl)" class="tv-image" alt="Image affichée" />
+      </div>
+
+      <!-- Merchant mode -->
+      <div v-else-if="tvMode === 'merchant' && activeMerchant" class="merchant-display">
+        <header class="merchant-header">
+          <div class="merchant-icon">🏪</div>
+          <h2 class="merchant-name">{{ activeMerchant.name }}</h2>
+          <p v-if="activeMerchant.description" class="merchant-desc">{{ activeMerchant.description }}</p>
+        </header>
+        <div class="merchant-grid">
+          <div
+            v-for="item in activeMerchant.items"
+            :key="item.id"
+            class="merchant-item"
+            :class="{ 'out-of-stock': item.stock === 0 }"
+          >
+            <div class="item-category">{{ item.category }}</div>
+            <div class="item-name">{{ item.name }}</div>
+            <p v-if="item.description" class="item-desc">{{ item.description }}</p>
+            <div class="item-footer">
+              <span class="item-price">{{ item.price }} po</span>
+              <span v-if="item.stock === -1" class="item-stock unlimited">∞</span>
+              <span v-else-if="item.stock === 0" class="item-stock empty">Épuisé</span>
+              <span v-else class="item-stock">× {{ item.stock }}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <footer class="tv-footer">
@@ -378,10 +415,10 @@ onUnmounted(() => {
 .error-icon { font-size: 3rem; }
 .error-text { font-family: var(--font-heading); font-size: 1.2rem; color: #ff6b6b; text-align: center; }
 
-/* ── Header ──────────────────────────────────────────────────────────── */
+/* ── Header (lobby only) ──────────────────────────────────────────────── */
 .tv-header {
   text-align: center;
-  margin-bottom: 2.5rem;
+  margin-bottom: 1rem;
 }
 .header-ornament {
   font-size: 2rem;
@@ -399,14 +436,6 @@ onUnmounted(() => {
   letter-spacing: 0.1em;
   margin: 0;
 }
-.party-label {
-  font-family: var(--font-heading);
-  font-size: clamp(0.7rem, 1.5vw, 1rem);
-  letter-spacing: 0.4em;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
-  margin-top: 0.5rem;
-}
 
 /* ── Lobby mode ───────────────────────────────────────────────────────── */
 .lobby-display {
@@ -415,7 +444,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2rem;
+  gap: 1.5rem;
 }
 .lobby-title {
   font-family: var(--font-title);
@@ -826,6 +855,103 @@ onUnmounted(() => {
   object-fit: contain;
   border-radius: 8px;
 }
+
+/* ── Merchant mode ────────────────────────────────────────────────────── */
+.merchant-display {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+.merchant-header {
+  text-align: center;
+}
+.merchant-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+.merchant-name {
+  font-family: var(--font-title);
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  color: var(--color-gold-bright);
+  text-shadow: 0 0 30px rgba(240,192,64,0.5);
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+.merchant-desc {
+  font-family: var(--font-heading);
+  font-size: clamp(0.7rem, 1.5vw, 1rem);
+  letter-spacing: 0.15em;
+  color: var(--color-text-dim);
+  margin-top: 0.5rem;
+}
+.merchant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+.merchant-item {
+  background: linear-gradient(160deg, #2a1e10 0%, #1a1208 100%);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.2s;
+}
+.merchant-item:not(.out-of-stock):hover {
+  border-color: var(--color-gold-dark);
+}
+.merchant-item.out-of-stock {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+}
+.item-category {
+  font-family: var(--font-heading);
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-gold-dark);
+}
+.item-name {
+  font-family: var(--font-heading);
+  font-size: clamp(0.85rem, 1.8vw, 1.1rem);
+  color: var(--color-parchment);
+  letter-spacing: 0.04em;
+}
+.item-desc {
+  font-family: var(--font-body);
+  font-size: clamp(0.7rem, 1.3vw, 0.85rem);
+  color: var(--color-text-dim);
+  line-height: 1.4;
+  margin: 0;
+  flex: 1;
+}
+.item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.25rem;
+}
+.item-price {
+  font-family: var(--font-title);
+  font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+  color: var(--color-gold-bright);
+  text-shadow: 0 0 12px rgba(240,192,64,0.4);
+}
+.item-stock {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--color-text-dim);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 0.15rem 0.5rem;
+}
+.item-stock.unlimited { color: var(--color-gold-dark); border-color: var(--color-gold-dark); }
+.item-stock.empty { color: #ff6b6b; border-color: #8b2a2a; background: rgba(139,42,42,0.1); }
 
 /* ── Footer ──────────────────────────────────────────────────────────── */
 .tv-footer {

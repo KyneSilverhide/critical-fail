@@ -123,6 +123,70 @@ const handleVoteSubmitted = (data) => {
   myVote.value = data.optionIndex
 }
 
+// Merchant
+const activeMerchant = ref(sessionStore.activeMerchant || null)
+const purchaseStateByItem = ref({}) // itemId -> 'idle'|'pending'
+const purchaseNotifications = ref([]) // { id, message, type }
+const counterOffers = ref([]) // { requestId, action, finalPrice, itemName }
+
+function buyItem(itemId) {
+  if (purchaseStateByItem.value[itemId] === 'pending') return
+  purchaseStateByItem.value[itemId] = 'pending'
+  const socket = getSocket()
+  socket.emit('request-purchase', { itemId, quantity: 1 })
+}
+
+function respondCounterOffer(requestId, accept) {
+  const socket = getSocket()
+  socket.emit('respond-counter-offer', { requestId, accept })
+  counterOffers.value = counterOffers.value.filter(c => c.requestId !== requestId)
+}
+
+function addNotification(message, type = 'info') {
+  const id = Date.now()
+  purchaseNotifications.value.push({ id, message, type })
+  setTimeout(() => {
+    purchaseNotifications.value = purchaseNotifications.value.filter(n => n.id !== id)
+  }, 5000)
+}
+
+const handleMerchantShown = (data) => { activeMerchant.value = data }
+const handleMerchantItemsUpdated = (data) => { activeMerchant.value = data }
+const handlePurchaseRequested = ({ itemId }) => {
+  // state stays 'pending' until confirmed
+}
+const handlePurchaseAccepted = ({ itemName, finalPrice }) => {
+  Object.keys(purchaseStateByItem.value).forEach(k => {
+    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
+  })
+  addNotification(`✅ Achat accepté : ${itemName} (${finalPrice} po)`, 'success')
+}
+const handlePurchaseRejected = ({ itemName }) => {
+  Object.keys(purchaseStateByItem.value).forEach(k => {
+    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
+  })
+  addNotification(`❌ Achat refusé : ${itemName}`, 'error')
+}
+const handlePurchaseCounterOffer = (data) => {
+  Object.keys(purchaseStateByItem.value).forEach(k => {
+    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
+  })
+  counterOffers.value.push(data)
+}
+const handleCounterOfferResult = ({ accepted, itemName, finalPrice }) => {
+  if (accepted) {
+    addNotification(`✅ Contre-offre acceptée : ${itemName} (${finalPrice} po)`, 'success')
+  } else {
+    addNotification(`↩️ Contre-offre déclinée : ${itemName}`, 'info')
+  }
+}
+const handlePurchaseError = ({ message }) => {
+  Object.keys(purchaseStateByItem.value).forEach(k => {
+    if (purchaseStateByItem.value[k] === 'pending') delete purchaseStateByItem.value[k]
+  })
+  addNotification(`⚠️ ${message}`, 'error')
+}
+
 onMounted(() => {
   if (!sessionStore.activeSession) { router.push('/join'); return }
   const socket = getSocket()
@@ -134,6 +198,14 @@ onMounted(() => {
   socket.on('vote-started', handleVoteStarted)
   socket.on('vote-closed', handleVoteClosed)
   socket.on('vote-submitted', handleVoteSubmitted)
+  socket.on('merchant-shown', handleMerchantShown)
+  socket.on('merchant-items-updated', handleMerchantItemsUpdated)
+  socket.on('purchase-requested', handlePurchaseRequested)
+  socket.on('purchase-accepted', handlePurchaseAccepted)
+  socket.on('purchase-rejected', handlePurchaseRejected)
+  socket.on('purchase-counter-offer', handlePurchaseCounterOffer)
+  socket.on('counter-offer-result', handleCounterOfferResult)
+  socket.on('purchase-error', handlePurchaseError)
 })
 
 onUnmounted(() => {
@@ -147,6 +219,14 @@ onUnmounted(() => {
     socket.off('vote-started', handleVoteStarted)
     socket.off('vote-closed', handleVoteClosed)
     socket.off('vote-submitted', handleVoteSubmitted)
+    socket.off('merchant-shown', handleMerchantShown)
+    socket.off('merchant-items-updated', handleMerchantItemsUpdated)
+    socket.off('purchase-requested', handlePurchaseRequested)
+    socket.off('purchase-accepted', handlePurchaseAccepted)
+    socket.off('purchase-rejected', handlePurchaseRejected)
+    socket.off('purchase-counter-offer', handlePurchaseCounterOffer)
+    socket.off('counter-offer-result', handleCounterOfferResult)
+    socket.off('purchase-error', handlePurchaseError)
   }
 })
 </script>
@@ -264,6 +344,60 @@ onUnmounted(() => {
         <p v-for="(opt, i) in activeVote.options" :key="i" class="vote-result-line">
           {{ opt }}: <strong>{{ activeVote.results[i] }}</strong> vote(s)
         </p>
+      </div>
+    </div>
+
+    <!-- Merchant Panel -->
+    <div v-if="activeMerchant" class="merchant-panel">
+      <h3 class="merchant-title">🏪 {{ activeMerchant.name }}</h3>
+      <p v-if="activeMerchant.description" class="merchant-desc">{{ activeMerchant.description }}</p>
+
+      <!-- Counter offers -->
+      <div v-for="offer in counterOffers" :key="offer.requestId" class="counter-offer">
+        <p class="offer-text">
+          <span v-if="offer.action === 'discount'">💚 Ristourne proposée</span>
+          <span v-else>📈 Nouveau prix proposé</span>
+          pour <strong>{{ offer.itemName }}</strong> :
+          <strong class="offer-price">{{ offer.finalPrice }} po</strong>
+        </p>
+        <div class="offer-actions">
+          <button class="offer-btn accept" @click="respondCounterOffer(offer.requestId, true)">Accepter</button>
+          <button class="offer-btn decline" @click="respondCounterOffer(offer.requestId, false)">Décliner</button>
+        </div>
+      </div>
+
+      <!-- Purchase notifications -->
+      <div v-for="notif in purchaseNotifications" :key="notif.id" class="purchase-notif" :class="notif.type">
+        {{ notif.message }}
+      </div>
+
+      <!-- Items grouped by category -->
+      <div class="shop-items">
+        <div
+          v-for="item in activeMerchant.items"
+          :key="item.id"
+          class="shop-item"
+          :class="{ 'out-of-stock': item.stock === 0 }"
+        >
+          <div class="shop-item-info">
+            <span class="shop-item-cat">{{ item.category }}</span>
+            <span class="shop-item-name">{{ item.name }}</span>
+            <p v-if="item.description" class="shop-item-desc">{{ item.description }}</p>
+          </div>
+          <div class="shop-item-right">
+            <span class="shop-item-price">{{ item.price }} po</span>
+            <span v-if="item.stock !== -1 && item.stock !== 0" class="shop-item-stock">×{{ item.stock }}</span>
+            <span v-else-if="item.stock === 0" class="shop-item-stock empty">Épuisé</span>
+            <button
+              v-if="item.stock !== 0"
+              class="buy-btn"
+              :disabled="purchaseStateByItem[item.id] === 'pending'"
+              @click="buyItem(item.id)"
+            >
+              {{ purchaseStateByItem[item.id] === 'pending' ? '…' : 'Acheter' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -579,4 +713,147 @@ onUnmounted(() => {
   margin: 0;
 }
 .vote-result-line strong { color: var(--color-parchment); }
+
+/* ── Merchant Panel ────────────────────────────────────────────────────── */
+.merchant-panel {
+  background: linear-gradient(160deg, #1e1e0a, #14140a);
+  border: 1px solid rgba(201,168,76,0.3);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0 0.5rem;
+}
+.merchant-title {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-gold-bright);
+  margin: 0;
+}
+.merchant-desc {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+  margin: 0;
+}
+
+/* Counter offer */
+.counter-offer {
+  background: linear-gradient(160deg, #1a2a0a, #101808);
+  border: 1px solid rgba(47,184,150,0.4);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.offer-text {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--color-text-dim);
+  margin: 0;
+}
+.offer-text strong { color: var(--color-parchment); }
+.offer-price { color: #2fb896 !important; }
+.offer-actions { display: flex; gap: 0.5rem; }
+.offer-btn {
+  flex: 1;
+  padding: 0.4rem;
+  border-radius: 6px;
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid;
+}
+.offer-btn.accept { background: rgba(47,184,150,0.1); border-color: #2fb896; color: #2fb896; }
+.offer-btn.accept:hover { background: rgba(47,184,150,0.25); }
+.offer-btn.decline { background: rgba(255,107,107,0.1); border-color: #ff6b6b; color: #ff6b6b; }
+.offer-btn.decline:hover { background: rgba(255,107,107,0.2); }
+
+/* Purchase notifications */
+.purchase-notif {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  animation: slideIn 0.3s ease;
+}
+.purchase-notif.success { background: rgba(47,184,150,0.1); border: 1px solid rgba(47,184,150,0.3); color: #2fb896; }
+.purchase-notif.error { background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.3); color: #ff6b6b; }
+.purchase-notif.info { background: rgba(255,255,255,0.04); border: 1px solid var(--color-border); color: var(--color-text-dim); }
+@keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Shop items */
+.shop-items { display: flex; flex-direction: column; gap: 0.5rem; }
+.shop-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+.shop-item:not(.out-of-stock):hover { border-color: rgba(201,168,76,0.4); }
+.shop-item.out-of-stock { opacity: 0.45; }
+.shop-item-info { flex: 1; min-width: 0; }
+.shop-item-cat {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 0.55rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-gold-dark);
+  margin-bottom: 0.15rem;
+}
+.shop-item-name {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  color: var(--color-parchment);
+}
+.shop-item-desc {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  margin: 0.15rem 0 0;
+}
+.shop-item-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.shop-item-price {
+  font-family: var(--font-title);
+  font-size: 1rem;
+  color: var(--color-gold-bright);
+}
+.shop-item-stock {
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  color: var(--color-text-dim);
+}
+.shop-item-stock.empty { color: #ff6b6b; }
+.buy-btn {
+  padding: 0.35rem 0.7rem;
+  background: rgba(201,168,76,0.1);
+  border: 1px solid var(--color-gold-dark);
+  border-radius: 6px;
+  color: var(--color-gold-bright);
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.buy-btn:hover:not(:disabled) { background: rgba(201,168,76,0.25); }
+.buy-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

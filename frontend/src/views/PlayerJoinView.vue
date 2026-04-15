@@ -118,6 +118,7 @@ async function joinSession() {
         dndClass: data.player.dnd_class,
         avatarUrl: data.player.avatar_url,
       }
+      sessionStore.activeMerchant = data.activeMerchant || null
       router.push('/player')
     })
 
