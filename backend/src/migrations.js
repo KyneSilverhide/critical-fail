@@ -99,6 +99,42 @@ CREATE TABLE IF NOT EXISTS session_events (
   value INTEGER,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS merchants (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  name VARCHAR(200) NOT NULL,
+  description TEXT DEFAULT '',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS merchant_items (
+  id SERIAL PRIMARY KEY,
+  merchant_id INTEGER REFERENCES merchants(id) ON DELETE CASCADE,
+  name VARCHAR(200) NOT NULL,
+  description TEXT DEFAULT '',
+  price INTEGER NOT NULL,
+  stock INTEGER DEFAULT -1,
+  category VARCHAR(50) DEFAULT 'Divers',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS purchase_requests (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES sessions(id),
+  merchant_id INTEGER REFERENCES merchants(id),
+  item_id INTEGER REFERENCES merchant_items(id),
+  player_id INTEGER REFERENCES players(id),
+  player_name VARCHAR(100),
+  quantity INTEGER DEFAULT 1,
+  base_price INTEGER NOT NULL,
+  final_price INTEGER,
+  status VARCHAR(20) DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS current_merchant_id INTEGER;
 `
 
 async function runMigrations() {

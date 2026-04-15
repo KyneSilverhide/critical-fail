@@ -8,6 +8,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 const selectedPlayerId = ref('all')
 const messageText = ref('')
+const authorName = ref('')
 const imageFile = ref(null)
 const messageType = ref('text')
 const voiceStyle = ref('normal')
@@ -86,6 +87,7 @@ async function sendMessage() {
       content,
       voiceStyle: voiceStyle.value,
       textEffect: textEffect.value,
+      authorName: authorName.value.trim() || null,
     })
 
     feedback.value = 'Message envoyé !'
@@ -109,6 +111,16 @@ async function sendMessage() {
     </div>
 
     <template v-else>
+      <div class="form-group">
+        <label class="form-label">Auteur (affiché aux joueurs)</label>
+        <input
+          v-model="authorName"
+          type="text"
+          class="form-select"
+          placeholder="Laisser vide pour utiliser votre login"
+        />
+      </div>
+
       <div class="form-group">
         <label class="form-label">Destinataire</label>
         <select v-model="selectedPlayerId" class="form-select" :disabled="!hasConnectedPlayers">

@@ -10,6 +10,9 @@ import MessageTool from '../components/admin/MessageTool.vue'
 import CriticalFailTool from '../components/admin/CriticalFailTool.vue'
 import SessionJournal from '../components/admin/SessionJournal.vue'
 import TvControls from '../components/admin/TvControls.vue'
+import VoteManager from '../components/admin/VoteManager.vue'
+import ImageManager from '../components/admin/ImageManager.vue'
+import MerchantManager from '../components/admin/MerchantManager.vue'
 
 const router = useRouter()
 const activeTab = ref('sessions')
@@ -20,6 +23,9 @@ const tabs = [
   { key: 'dice', label: 'Critical Fail', icon: '🎲' },
   { key: 'journal', label: 'Journal', icon: '📜' },
   { key: 'tv', label: 'TV', icon: '📺' },
+  { key: 'vote', label: 'Vote', icon: '🗳️' },
+  { key: 'images', label: 'Images', icon: '🖼️' },
+  { key: 'merchants', label: 'Marchands', icon: '🏪' },
 ]
 
 function logout() {
@@ -117,6 +123,18 @@ onUnmounted(() => {
       </div>
       <div v-show="activeTab === 'tv'">
         <TvControls v-if="sessionStore.activeSession" />
+        <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
+      </div>
+      <div v-show="activeTab === 'vote'">
+        <VoteManager v-if="sessionStore.activeSession" />
+        <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
+      </div>
+      <div v-show="activeTab === 'images'">
+        <ImageManager v-if="sessionStore.activeSession" />
+        <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
+      </div>
+      <div v-show="activeTab === 'merchants'">
+        <MerchantManager v-if="sessionStore.activeSession" />
         <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
       </div>
     </main>
