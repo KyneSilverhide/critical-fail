@@ -13,8 +13,8 @@ const sessionName = ref(sessionStore.activeSession?.name || 'Session')
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 // ── Active tab ───────────────────────────────────────────────────────────
-// Tabs: 'statut' | 'conditions' | 'boutique' | 'vote' | 'messages'
-const activeTab = ref('statut')
+// Tabs: 'combat' | 'boutique' | 'vote' | 'messages'
+const activeTab = ref('combat')
 
 function switchTab(tab) {
   activeTab.value = tab
@@ -205,7 +205,7 @@ const handleMerchantClosed = () => {
   activeMerchant.value = null
   cart.value = {}
   cartSending.value = false
-  if (activeTab.value === 'boutique') activeTab.value = 'statut'
+  if (activeTab.value === 'boutique') activeTab.value = 'combat'
 }
 const handleMerchantItemsUpdated = (data) => {
   activeMerchant.value = data
@@ -240,6 +240,14 @@ const handlePurchaseError = ({ message }) => {
   purchaseResultModal.value = { type: 'error', message }
 }
 
+function handleKicked() {
+  const socket = getSocket()
+  if (socket) socket.disconnect()
+  sessionStore.setActiveSession(null)
+  sessionStore.playerInfo = null
+  router.push('/?kicked=1')
+}
+
 function handleBeforeUnload() {
   const socket = getSocket()
   if (socket && sessionStore.activeSession) {
@@ -267,6 +275,7 @@ onMounted(() => {
   socket.on('purchase-counter-offer', handlePurchaseCounterOffer)
   socket.on('counter-offer-result', handleCounterOfferResult)
   socket.on('purchase-error', handlePurchaseError)
+  socket.on('kicked', handleKicked)
   window.addEventListener('beforeunload', handleBeforeUnload)
 })
 
@@ -291,6 +300,7 @@ onUnmounted(() => {
     socket.off('purchase-counter-offer', handlePurchaseCounterOffer)
     socket.off('counter-offer-result', handleCounterOfferResult)
     socket.off('purchase-error', handlePurchaseError)
+    socket.off('kicked', handleKicked)
   }
   window.removeEventListener('beforeunload', handleBeforeUnload)
 })
@@ -370,8 +380,8 @@ onUnmounted(() => {
     <!-- ── Scrollable content ────────────────────────────────────────────── -->
     <main class="inbox-content">
 
-      <!-- ── STATUT tab ───────────────────────────────────────────────── -->
-      <div v-show="activeTab === 'statut'" class="tab-panel">
+      <!-- ── COMBAT tab (Statut + Conditions) ───────────────────────────── -->
+      <div v-show="activeTab === 'combat'" class="tab-panel">
         <!-- HP Panel -->
         <div class="panel hp-panel">
           <div class="panel-header">
@@ -435,10 +445,8 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- ── CONDITIONS tab ───────────────────────────────────────────── -->
-      <div v-show="activeTab === 'conditions'" class="tab-panel">
+        <!-- Conditions -->
         <div class="panel">
           <p class="panel-label">⚡ États et Conditions</p>
           <div class="conditions-grid">
@@ -565,20 +573,12 @@ onUnmounted(() => {
     <nav class="tab-bar">
       <button
         class="tab-item"
-        :class="{ active: activeTab === 'statut' }"
-        @click="switchTab('statut')"
+        :class="{ active: activeTab === 'combat' }"
+        @click="switchTab('combat')"
       >
-        <span class="tab-icon">❤️</span>
-        <span class="tab-label">Statut</span>
-      </button>
-      <button
-        class="tab-item"
-        :class="{ active: activeTab === 'conditions' }"
-        @click="switchTab('conditions')"
-      >
-        <span class="tab-icon">⚡</span>
-        <span class="tab-label">États</span>
-        <span v-if="activeConditions.length > 0" class="tab-badge">{{ activeConditions.length }}</span>
+        <span class="tab-icon" :class="{ 'tab-icon-notify': activeConditions.length > 0 }">⚔️</span>
+        <span class="tab-label">Combat</span>
+        <span v-if="activeConditions.length > 0" class="tab-badge tab-badge-urgent">{{ activeConditions.length }}</span>
       </button>
       <button
         class="tab-item"
@@ -586,27 +586,28 @@ onUnmounted(() => {
         :disabled="!activeMerchant"
         @click="switchTab('boutique')"
       >
-        <span class="tab-icon">🏪</span>
+        <span class="tab-icon" :class="{ 'tab-icon-notify': activeMerchant && cartItemCount === 0 }">🏪</span>
         <span class="tab-label">Boutique</span>
-        <span v-if="cartItemCount > 0" class="tab-badge">{{ cartItemCount }}</span>
+        <span v-if="cartItemCount > 0" class="tab-badge tab-badge-urgent">{{ cartItemCount }}</span>
+        <span v-else-if="activeMerchant && activeTab !== 'boutique'" class="tab-badge tab-badge-pulse">!</span>
       </button>
       <button
         class="tab-item"
         :class="{ active: activeTab === 'vote' }"
         @click="switchTab('vote'); hasNewVote = false"
       >
-        <span class="tab-icon">🗳️</span>
+        <span class="tab-icon" :class="{ 'tab-icon-notify': hasNewVote && activeTab !== 'vote' }">🗳️</span>
         <span class="tab-label">Vote</span>
-        <span v-if="hasNewVote && activeTab !== 'vote'" class="tab-badge pulse">!</span>
+        <span v-if="hasNewVote && activeTab !== 'vote'" class="tab-badge tab-badge-pulse">!</span>
       </button>
       <button
         class="tab-item"
         :class="{ active: activeTab === 'messages' }"
         @click="switchTab('messages')"
       >
-        <span class="tab-icon">📜</span>
+        <span class="tab-icon" :class="{ 'tab-icon-notify': unreadMessages > 0 }">📜</span>
         <span class="tab-label">Messages</span>
-        <span v-if="unreadMessages > 0" class="tab-badge">{{ unreadMessages }}</span>
+        <span v-if="unreadMessages > 0" class="tab-badge tab-badge-urgent">{{ unreadMessages }}</span>
       </button>
     </nav>
 
@@ -1060,22 +1061,46 @@ onUnmounted(() => {
   border-radius: 0 0 2px 2px;
 }
 .tab-item:disabled { opacity: 0.3; cursor: not-allowed; }
-.tab-icon { font-size: 1.3rem; line-height: 1; }
+.tab-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+  transition: transform 0.2s, filter 0.2s;
+}
+.tab-icon-notify {
+  animation: iconShake 0.6s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 6px #e03030);
+}
+@keyframes iconShake {
+  0% { transform: rotate(-8deg) scale(1.1); }
+  100% { transform: rotate(8deg) scale(1.2); }
+}
 .tab-label { font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 .tab-badge {
   position: absolute;
-  top: 4px; right: calc(50% - 16px);
-  min-width: 16px; height: 16px;
-  padding: 0 3px;
-  background: #e03030;
-  border-radius: 8px;
+  top: 4px; right: calc(50% - 18px);
+  min-width: 18px; height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
   font-family: var(--font-heading);
-  font-size: 0.6rem;
+  font-size: 0.65rem;
+  font-weight: 700;
   color: white;
   display: flex; align-items: center; justify-content: center;
 }
-.tab-badge.pulse { animation: badgePulse 1.5s ease-in-out infinite; }
-@keyframes badgePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+.tab-badge-urgent {
+  background: #e03030;
+  box-shadow: 0 0 8px #e03030, 0 0 16px rgba(224,48,48,0.5);
+  animation: urgentPulse 1s ease-in-out infinite;
+}
+.tab-badge-pulse {
+  background: #f0a500;
+  box-shadow: 0 0 8px #f0a500, 0 0 16px rgba(240,165,0,0.5);
+  animation: urgentPulse 0.8s ease-in-out infinite;
+}
+@keyframes urgentPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.85; }
+}
 
 /* ── Modals ──────────────────────────────────────────────────────────── */
 .modal-overlay {

@@ -165,9 +165,12 @@ function groupLoadedRequests(rows) {
 }
 
 // ── Purchase response ────────────────────────────────────────────────────
+const respondCustomPrice = ref(0)
+
 function openRespond(req) {
   respondingRequest.value = req
   respondAction.value = 'accept'
+  respondCustomPrice.value = req.total_price
 }
 
 function submitRespond() {
@@ -179,11 +182,13 @@ function submitRespond() {
       action: respondAction.value,
     })
   } else {
-    // Legacy single item
+    // Legacy single item — supports discount/increase with custom price
     socket.emit('respond-purchase', {
       requestId: respondingRequest.value.id,
       action: respondAction.value,
-      finalPrice: respondingRequest.value.total_price,
+      finalPrice: (respondAction.value === 'discount' || respondAction.value === 'increase')
+        ? respondCustomPrice.value
+        : respondingRequest.value.total_price,
     })
   }
   respondingRequest.value = null
@@ -384,6 +389,28 @@ onUnmounted(() => {
             :class="{ active: respondAction === 'reject' }"
             @click="respondAction = 'reject'"
           >❌ Refuser</button>
+          <button
+            v-if="!respondingRequest.batch_id"
+            class="respond-action-btn discount"
+            :class="{ active: respondAction === 'discount' }"
+            @click="respondAction = 'discount'"
+          >💚 Ristourne</button>
+          <button
+            v-if="!respondingRequest.batch_id"
+            class="respond-action-btn increase"
+            :class="{ active: respondAction === 'increase' }"
+            @click="respondAction = 'increase'"
+          >📈 Augmenter</button>
+        </div>
+
+        <div v-if="respondAction === 'discount' || respondAction === 'increase'" class="custom-price-row">
+          <label class="custom-price-label">Prix final (po) :</label>
+          <input
+            v-model.number="respondCustomPrice"
+            type="number"
+            min="0"
+            class="custom-price-input"
+          />
         </div>
 
         <div class="dialog-footer">
@@ -794,6 +821,41 @@ onUnmounted(() => {
 }
 .respond-action-btn.active { border-color: var(--color-gold-dark); color: var(--color-gold-bright); background: rgba(201,168,76,0.1); }
 .respond-action-btn.reject.active { border-color: #cc3030; color: #ff6060; background: rgba(200,48,48,0.1); }
+.respond-action-btn.discount.active { border-color: #2fb896; color: #2fb896; background: rgba(47,184,150,0.12); }
+.respond-action-btn.increase.active { border-color: #f0a500; color: #f0a500; background: rgba(240,165,0,0.12); }
+
+.custom-price-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+.custom-price-label {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+.custom-price-input {
+  flex: 1;
+  background: #12100a;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  color: var(--color-gold-bright);
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  width: 80px;
+}
+.custom-price-input:focus { border-color: var(--color-gold-dark); }
 
 .dialog-footer { display: flex; gap: 0.5rem; }
 .cancel-btn {
