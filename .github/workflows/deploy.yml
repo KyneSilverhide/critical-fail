@@ -6,8 +6,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/critical-fail-backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/critical-fail-frontend
+  BACKEND_IMAGE: ghcr.io/kynesilverhide/critical-fail-backend
+  FRONTEND_IMAGE: ghcr.io/kynesilverhide/critical-fail-frontend
 
 jobs:
   build-and-deploy:
@@ -44,6 +44,6 @@ jobs:
             ${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
 
-      - name: Trigger Portainer webhook
-        run: |
-          curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
+      # - name: Trigger Portainer webhook
+      #   run: |
+      #     curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
