@@ -21,7 +21,8 @@ services:
       - postgres
     volumes:
       - uploads:/app/uploads
-
+    environment:
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL}
   frontend:
     image: ghcr.io/kynesilverhide/critical-fail-frontend:latest
     ports:
