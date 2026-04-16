@@ -177,10 +177,10 @@ onMounted(loadImages)
 .show-btn {
   width: 100%;
   padding: 0.3rem 0.25rem;
-  background: rgba(137,196,255,0.08);
-  border: 1px solid rgba(137,196,255,0.3);
+  background: rgba(201,168,76,0.08);
+  border: 1px solid rgba(201,168,76,0.3);
   border-radius: 6px;
-  color: #89c4ff;
+  color: var(--color-gold);
   font-family: var(--font-heading);
   font-size: 0.6rem;
   letter-spacing: 0.04em;
@@ -189,5 +189,5 @@ onMounted(loadImages)
   text-align: center;
   white-space: nowrap;
 }
-.show-btn:hover { background: rgba(137,196,255,0.18); border-color: #89c4ff; }
+.show-btn:hover { background: rgba(201,168,76,0.18); border-color: var(--color-gold-bright); color: var(--color-gold-bright); }
 </style>

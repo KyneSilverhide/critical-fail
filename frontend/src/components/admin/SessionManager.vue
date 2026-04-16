@@ -392,8 +392,8 @@ onMounted(loadSessions)
 
 .tv-section {
   margin-top: 0.75rem;
-  background: linear-gradient(160deg, #0e1a2a, #091220);
-  border: 1px solid rgba(137,196,255,0.25);
+  background: linear-gradient(160deg, #1a1808, #0e0c04);
+  border: 1px solid rgba(201,168,76,0.25);
   border-radius: 8px;
   padding: 0.75rem;
   display: flex;
@@ -412,20 +412,20 @@ onMounted(loadSessions)
   font-size: 0.7rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #89c4ff;
+  color: var(--color-gold);
 }
 
 .tv-open-btn {
   font-family: var(--font-heading);
   font-size: 0.65rem;
-  color: #89c4ff;
+  color: var(--color-gold);
   text-decoration: none;
-  border: 1px solid rgba(137,196,255,0.3);
+  border: 1px solid rgba(201,168,76,0.35);
   padding: 0.15rem 0.5rem;
   border-radius: 20px;
   transition: all 0.2s;
 }
-.tv-open-btn:hover { background: rgba(137,196,255,0.1); }
+.tv-open-btn:hover { background: rgba(201,168,76,0.1); color: var(--color-gold-bright); }
 
 .tv-url-row {
   display: flex;
@@ -437,16 +437,16 @@ onMounted(loadSessions)
   flex: 1;
   font-family: monospace;
   font-size: 0.7rem;
-  color: rgba(137,196,255,0.7);
+  color: var(--color-text-dim);
   word-break: break-all;
 }
 
 .tv-copy-btn {
   padding: 0.2rem 0.55rem;
-  background: rgba(137,196,255,0.08);
-  border: 1px solid rgba(137,196,255,0.25);
+  background: rgba(201,168,76,0.08);
+  border: 1px solid rgba(201,168,76,0.25);
   border-radius: 6px;
-  color: #89c4ff;
+  color: var(--color-gold);
   font-family: var(--font-heading);
   font-size: 0.6rem;
   letter-spacing: 0.05em;
@@ -454,7 +454,7 @@ onMounted(loadSessions)
   white-space: nowrap;
   transition: all 0.2s;
 }
-.tv-copy-btn:hover { background: rgba(137,196,255,0.15); }
+.tv-copy-btn:hover { background: rgba(201,168,76,0.15); color: var(--color-gold-bright); }
 
 .tv-hint {
   font-family: var(--font-body);

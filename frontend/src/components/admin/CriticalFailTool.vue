@@ -493,6 +493,10 @@ onUnmounted(() => {
   outline: none;
   cursor: pointer;
 }
+.recipient-select option {
+  background: var(--color-surface-soft);
+  color: var(--color-parchment);
+}
 .recipient-select:focus { border-color: var(--color-gold-dark); }
 .recipient-select:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -513,6 +517,7 @@ onUnmounted(() => {
 .send-btn:hover:not(:disabled) {
   background: linear-gradient(160deg, #2a6a3a, #1a4a2a);
   box-shadow: 0 4px 20px rgba(42,106,58,0.4);
+  color: #7fffa0;
 }
 
 .send-btn:disabled {
