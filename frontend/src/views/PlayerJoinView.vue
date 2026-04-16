@@ -293,7 +293,7 @@ async function joinSession() {
 .stat-icon { font-size: 0.9rem; }
 
 .form-input {
-  background: #1e1508;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
@@ -311,7 +311,7 @@ async function joinSession() {
   background-position: right 0.9rem center;
   padding-right: 2.5rem;
 }
-.form-select option { background: #1e1508; color: var(--color-parchment); }
+.form-select option { background: var(--color-surface); color: var(--color-parchment); }
 .stat-input { text-align: center; font-size: 1.3rem; font-weight: 700; padding: 0.75rem 0.5rem; }
 .form-input:focus { border-color: var(--color-gold-dark); }
 .form-input::placeholder { color: var(--color-border); }

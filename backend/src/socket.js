@@ -654,9 +654,17 @@ function setupSocket(io) {
         )
         const player = pr.rows[0]
         if (!player) return
-        // Notify the player's socket before removing
+        // Notify and clear real-time session state for the kicked player
         if (player.socket_id) {
-          io.to(player.socket_id).emit('kicked')
+          const playerSocket = io.sockets.sockets.get(player.socket_id)
+          if (playerSocket) {
+            playerSocket.leave(`session:${player.session_id}`)
+            playerSocket.playerId = null
+            playerSocket.sessionId = null
+            playerSocket.emit('kicked')
+          } else {
+            io.to(player.socket_id).emit('kicked')
+          }
         }
         // Remove from DB
         await pool.query('DELETE FROM players WHERE id = $1', [playerId])

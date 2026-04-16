@@ -157,7 +157,7 @@ async function login() {
 }
 
 .form-input {
-  background: #1e1508;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.75rem 1rem;

@@ -1,21 +1,24 @@
 :root {
-  --color-bg: #1c1409;
-  --color-bg2: #261a0d;
-  --color-parchment: #f5ecd5;
-  --color-parchment-dark: #d4bc8a;
-  --color-gold: #c9a84c;
-  --color-gold-bright: #f0c040;
-  --color-gold-dark: #a07c28;
-  --color-red: #9b2020;
-  --color-red-bright: #c0392b;
-  --color-crimson: #7a1515;
-  --color-text: #eeddc0;
-  --color-text-dim: #b09070;
-  --color-border: #5c4428;
-  --color-shadow: rgba(0, 0, 0, 0.7);
-  --font-title: 'Cinzel Decorative', serif;
-  --font-heading: 'Cinzel', serif;
-  --font-body: 'IM Fell English', serif;
+  --color-bg: #f3f7fc;
+  --color-bg2: #e6edf7;
+  --color-parchment: #0f172a;
+  --color-parchment-dark: #334155;
+  --color-gold: #2563eb;
+  --color-gold-bright: #1d4ed8;
+  --color-gold-dark: #1e40af;
+  --color-red: #b91c1c;
+  --color-red-bright: #dc2626;
+  --color-crimson: #991b1b;
+  --color-text: #1e293b;
+  --color-text-dim: #64748b;
+  --color-border: #cbd5e1;
+  --color-shadow: rgba(15, 23, 42, 0.16);
+  --color-surface: #ffffff;
+  --color-surface-alt: #f8fafc;
+  --color-surface-soft: #eef4ff;
+  --font-title: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-heading: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-body: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 * {
@@ -35,16 +38,97 @@ body {
   font-family: var(--font-body);
   min-height: 100vh;
   background-image:
-    radial-gradient(ellipse at top, #2a1500 0%, #1c1409 60%),
-    url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%235c4428' fill-opacity='0.10'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    radial-gradient(circle at top right, #ffffff 0%, #edf3fc 45%, #e4edf9 100%);
 }
 
 #app {
-  max-width: 1200px;
+  max-width: 1440px;
   width: 100%;
   margin: 0 auto;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   padding: 0 0 2rem 0;
+}
+
+button,
+.home-btn,
+.send-btn,
+.submit-btn,
+.action-btn,
+.create-btn {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+button:hover:not(:disabled),
+.home-btn:hover,
+.send-btn:hover:not(:disabled),
+.submit-btn:hover:not(:disabled),
+.action-btn:hover:not(:disabled),
+.create-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.session-card,
+.player-item,
+.panel,
+.merchant-item,
+.spell-card,
+.message-card {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  animation: fadeUp 0.28s ease both;
+}
+
+.form-input,
+.form-select,
+.form-textarea,
+.search-input,
+.recipient-select,
+.custom-price-input {
+  background: var(--color-surface-alt) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+.form-input::placeholder,
+.form-select::placeholder,
+.form-textarea::placeholder,
+.search-input::placeholder {
+  color: var(--color-text-dim) !important;
+}
+
+.admin-header,
+.inbox-header,
+.tv-header,
+.login-header,
+.home-header {
+  background: transparent !important;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-wrapper {
+    max-width: 1440px !important;
+  }
+  .admin-main {
+    padding: 2rem !important;
+  }
+}
+
+@media (max-width: 900px) {
+  #app {
+    padding-bottom: 1rem;
+  }
 }

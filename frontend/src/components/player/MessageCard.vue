@@ -104,7 +104,7 @@ function resolvedText() {
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--color-border);
-  background: linear-gradient(160deg, #2a1e10, #1a1208);
+  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
   animation: slideIn 0.3s ease;
 }
 

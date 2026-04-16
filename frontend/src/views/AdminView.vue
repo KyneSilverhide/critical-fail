@@ -158,7 +158,7 @@ onUnmounted(() => {
 
 .admin-header {
   padding: 1.5rem 1.5rem 0;
-  background: linear-gradient(180deg, #1a0f05 0%, transparent 100%);
+  background: linear-gradient(180deg, var(--color-surface-alt) 0%, transparent 100%);
   border-bottom: 1px solid var(--color-border);
 }
 

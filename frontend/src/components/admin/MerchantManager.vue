@@ -537,7 +537,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  background: linear-gradient(160deg, #1e1408, #150e05);
+  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 1rem;
@@ -551,7 +551,7 @@ onUnmounted(() => {
   color: var(--color-text-dim);
 }
 .form-input {
-  background: #12100a;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 0.5rem 0.75rem;
@@ -644,7 +644,7 @@ onUnmounted(() => {
   padding: 1.5rem 0;
 }
 .merchant-card {
-  background: linear-gradient(160deg, #1e1408, #150e05);
+  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 1rem;
@@ -749,7 +749,7 @@ onUnmounted(() => {
   z-index: 100;
 }
 .respond-dialog {
-  background: linear-gradient(160deg, #2a1e10, #1a1208);
+  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
   border: 1px solid var(--color-gold-dark);
   border-radius: 12px;
   padding: 1.5rem;
@@ -807,7 +807,7 @@ onUnmounted(() => {
 .respond-action-btn {
   flex: 1;
   padding: 0.5rem 0.5rem;
-  background: #1e1508;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   color: var(--color-text-dim);
@@ -843,7 +843,7 @@ onUnmounted(() => {
 }
 .custom-price-input {
   flex: 1;
-  background: #12100a;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 0.4rem 0.6rem;

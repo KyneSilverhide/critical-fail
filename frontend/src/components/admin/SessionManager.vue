@@ -222,7 +222,7 @@ onMounted(loadSessions)
 
 .form-input {
   flex: 1;
-  background: #1e1508;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.65rem 1rem;
@@ -262,7 +262,7 @@ onMounted(loadSessions)
 }
 
 .session-card {
-  background: linear-gradient(160deg, #2a1e10, #1e1408);
+  background: linear-gradient(160deg, var(--color-surface), var(--color-surface));
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 1rem;

@@ -62,7 +62,7 @@ onUnmounted(() => {
 }
 
 .control-section {
-  background: linear-gradient(160deg, #1e1408, #150e05);
+  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 1rem;

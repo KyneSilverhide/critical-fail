@@ -233,7 +233,7 @@ async function sendMessage() {
 
 .form-select,
 .form-textarea {
-  background: #1e1508;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.65rem 1rem;
@@ -263,7 +263,7 @@ async function sendMessage() {
 .toggle-btn {
   flex: 1;
   padding: 0.5rem;
-  background: #1e1508;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   color: var(--color-text-dim);

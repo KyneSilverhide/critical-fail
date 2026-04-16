@@ -366,7 +366,7 @@ onUnmounted(() => {
 <style scoped>
 .tv-wrapper {
   min-height: 100vh;
-  background: radial-gradient(ellipse at top, #1a0f05 0%, #0a0802 60%, #000 100%);
+  background: radial-gradient(ellipse at top, var(--color-surface-alt) 0%, var(--color-bg) 60%, #000 100%);
   display: flex;
   flex-direction: column;
   padding: 2.5rem 3rem;
@@ -475,7 +475,7 @@ onUnmounted(() => {
 /* ── Player Card ─────────────────────────────────────────────────────── */
 .player-card {
   position: relative;
-  background: linear-gradient(160deg, #2a1e10 0%, #1a1208 50%, #120d05 100%);
+  background: linear-gradient(160deg, var(--color-surface) 0%, var(--color-surface-alt) 50%, #120d05 100%);
   border: 1px solid var(--color-border);
   border-radius: 20px;
   padding: 2rem;
@@ -850,7 +850,7 @@ onUnmounted(() => {
   gap: 1.5rem;
 }
 .merchant-item {
-  background: linear-gradient(160deg, #2a1e10 0%, #1a1208 100%);
+  background: linear-gradient(160deg, var(--color-surface) 0%, var(--color-surface-alt) 100%);
   border: 1px solid var(--color-border);
   border-radius: 14px;
   padding: 1.5rem;
