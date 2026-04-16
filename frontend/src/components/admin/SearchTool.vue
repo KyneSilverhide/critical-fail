@@ -213,7 +213,7 @@ onUnmounted(() => {
 
 .search-input {
   flex: 1;
-  background: #12100a;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.6rem 0.9rem;

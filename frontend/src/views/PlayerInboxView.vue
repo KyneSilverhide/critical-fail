@@ -312,8 +312,7 @@ const handlePurchaseError = ({ message }) => {
 }
 
 function handleKicked() {
-  const socket = getSocket()
-  if (socket) socket.disconnect()
+  resetSocket()
   sessionStore.setActiveSession(null)
   sessionStore.playerInfo = null
   router.push('/?kicked=1')
@@ -697,7 +696,7 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
-  background: var(--color-bg, #0a0802);
+  background: var(--color-bg, var(--color-bg));
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
@@ -706,7 +705,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  background: linear-gradient(180deg, #1a0f05 0%, #100a04 100%);
+  background: linear-gradient(180deg, var(--color-surface-alt) 0%, var(--color-surface-alt) 100%);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   gap: 0.75rem;
@@ -786,7 +785,7 @@ onUnmounted(() => {
 
 /* ── Panel cards ─────────────────────────────────────────────────────── */
 .panel {
-  background: linear-gradient(160deg, #1e1408, #150e06);
+  background: linear-gradient(160deg, var(--color-surface), #150e06);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1rem;
@@ -1104,7 +1103,7 @@ onUnmounted(() => {
 /* ── Tab bar ─────────────────────────────────────────────────────────── */
 .tab-bar {
   display: flex;
-  background: linear-gradient(0deg, #1a0f05 0%, #100a04 100%);
+  background: linear-gradient(0deg, var(--color-surface-alt) 0%, var(--color-surface-alt) 100%);
   border-top: 1px solid var(--color-border);
   flex-shrink: 0;
   padding-bottom: env(safe-area-inset-bottom, 0);
@@ -1190,7 +1189,7 @@ onUnmounted(() => {
   padding: 1rem;
 }
 .modal-box {
-  background: linear-gradient(160deg, #2a1e10, #1a1208);
+  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
   border: 1px solid var(--color-gold-dark);
   border-radius: 16px;
   padding: 2rem 1.5rem;

@@ -113,7 +113,7 @@ const router = useRouter()
   transition: all 0.25s ease;
   text-align: left;
   border: 1px solid var(--color-border);
-  background: linear-gradient(160deg, #2e2010, #1e1508);
+  background: linear-gradient(160deg, var(--color-surface-soft), var(--color-surface));
   color: var(--color-parchment);
   font-family: var(--font-heading);
 }

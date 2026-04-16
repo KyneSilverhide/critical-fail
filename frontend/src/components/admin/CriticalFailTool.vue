@@ -230,7 +230,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.3rem;
   padding: 0.75rem 0.5rem;
-  background: linear-gradient(160deg, #2e2010 0%, #1e1508 100%);
+  background: linear-gradient(160deg, var(--color-surface-soft) 0%, var(--color-surface) 100%);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   color: var(--color-text-dim);
@@ -423,7 +423,7 @@ onUnmounted(() => {
 }
 
 .result-card {
-  background: linear-gradient(160deg, #2a1e10 0%, #1e1408 100%);
+  background: linear-gradient(160deg, var(--color-surface) 0%, var(--color-surface) 100%);
   border: 1px solid var(--color-gold-dark);
   border-radius: 12px;
   padding: 1.5rem;
@@ -483,7 +483,7 @@ onUnmounted(() => {
 
 .recipient-select {
   flex: 1;
-  background: #1e1508;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.6rem 0.75rem;
