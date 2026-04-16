@@ -13,6 +13,7 @@ import TvControls from '../components/admin/TvControls.vue'
 import VoteManager from '../components/admin/VoteManager.vue'
 import ImageManager from '../components/admin/ImageManager.vue'
 import MerchantManager from '../components/admin/MerchantManager.vue'
+import SearchTool from '../components/admin/SearchTool.vue'
 
 const router = useRouter()
 const activeTab = ref('sessions')
@@ -26,6 +27,7 @@ const tabs = [
   { key: 'vote', label: 'Vote', icon: '🗳️' },
   { key: 'images', label: 'Images', icon: '🖼️' },
   { key: 'merchants', label: 'Marchands', icon: '🏪' },
+  { key: 'search', label: 'Recherche', icon: '🔍' },
 ]
 
 function logout() {
@@ -136,6 +138,9 @@ onUnmounted(() => {
       <div v-show="activeTab === 'merchants'">
         <MerchantManager v-if="sessionStore.activeSession" />
         <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
+      </div>
+      <div v-show="activeTab === 'search'">
+        <SearchTool />
       </div>
     </main>
   </div>
