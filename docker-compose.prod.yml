@@ -8,7 +8,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  backend:
+  dmtoolkit-backend:
     image: ghcr.io/kynesilverhide/critical-fail-backend:latest
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -21,10 +21,10 @@ services:
       - postgres
     volumes:
       - uploads:/app/uploads
-  frontend:
+  dmtoolkit-frontend:
     image: ghcr.io/kynesilverhide/critical-fail-frontend:latest
     ports:
-      - "5173:80"
+      - "8080:80"
     depends_on:
       - backend
     environment:
