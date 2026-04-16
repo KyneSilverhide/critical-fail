@@ -23,7 +23,7 @@
   --color-surface: #1e1508;
   --color-surface-alt: #170f04;
   --color-surface-soft: #251c0c;
-  /* ── D&D-inspired fonts ────────────────────────────────────────────── */
+  /* ── D&D-inspired fonts (loaded via Google Fonts in index.html) ─────── */
   --font-title: 'Cinzel Decorative', 'Cinzel', Georgia, serif;
   --font-heading: 'Cinzel', Georgia, serif;
   --font-body: 'IM Fell English', Georgia, 'Times New Roman', serif;

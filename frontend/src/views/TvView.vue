@@ -207,9 +207,9 @@ onUnmounted(() => {
       <!-- Lobby mode: session title + QR code + session code -->
       <div v-if="tvMode === 'lobby'" class="lobby-display">
         <header class="tv-header">
-          <div class="lobby-ornament">⚜</div>
+          <div class="lobby-ornament" aria-hidden="true">⚜</div>
           <h1 class="session-title">{{ session.name }}</h1>
-          <div class="lobby-divider">⸻ ✦ ⸻</div>
+          <div class="lobby-divider" aria-hidden="true">⸻ ✦ ⸻</div>
         </header>
         <p class="lobby-title">Rejoignez la partie !</p>
         <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" alt="QR Code" class="lobby-qr" />
