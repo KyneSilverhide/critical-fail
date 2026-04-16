@@ -146,7 +146,7 @@ function resolvedText() {
 .card-time {
   font-family: var(--font-heading);
   font-size: 0.65rem;
-  color: var(--color-border);
+  color: var(--color-text-dim);
 }
 
 .dice-roll {

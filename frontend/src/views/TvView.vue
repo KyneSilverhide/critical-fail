@@ -207,7 +207,9 @@ onUnmounted(() => {
       <!-- Lobby mode: session title + QR code + session code -->
       <div v-if="tvMode === 'lobby'" class="lobby-display">
         <header class="tv-header">
+          <div class="lobby-ornament">⚜</div>
           <h1 class="session-title">{{ session.name }}</h1>
+          <div class="lobby-divider">⸻ ✦ ⸻</div>
         </header>
         <p class="lobby-title">Rejoignez la partie !</p>
         <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" alt="QR Code" class="lobby-qr" />
@@ -366,7 +368,8 @@ onUnmounted(() => {
 <style scoped>
 .tv-wrapper {
   min-height: 100vh;
-  background: radial-gradient(ellipse at top, var(--color-surface-alt) 0%, var(--color-bg) 60%, #000 100%);
+  background: var(--color-bg);
+  background-image: radial-gradient(ellipse at 50% 0%, #1f1608 0%, #120d04 60%);
   display: flex;
   flex-direction: column;
   padding: 2.5rem 3rem;
@@ -406,7 +409,20 @@ onUnmounted(() => {
   color: var(--color-gold-bright);
   text-shadow: 0 0 40px rgba(240,192,64,0.4), 0 2px 0 rgba(0,0,0,0.8);
   letter-spacing: 0.1em;
-  margin: 0;
+  margin: 0.25rem 0;
+}
+.lobby-ornament {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  color: var(--color-gold-dark);
+  opacity: 0.8;
+  margin-bottom: 0.5rem;
+}
+.lobby-divider {
+  font-family: var(--font-heading);
+  font-size: clamp(0.8rem, 1.5vw, 1.1rem);
+  letter-spacing: 0.5em;
+  color: var(--color-gold-dark);
+  margin-top: 0.5rem;
 }
 
 /* ── Lobby mode ───────────────────────────────────────────────────────── */
@@ -420,9 +436,9 @@ onUnmounted(() => {
 }
 .lobby-title {
   font-family: var(--font-title);
-  font-size: clamp(2rem, 4vw, 3rem);
-  color: var(--color-gold-bright);
-  text-shadow: 0 0 30px rgba(240,192,64,0.5);
+  font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+  color: var(--color-parchment);
+  text-shadow: 0 0 20px rgba(240,192,64,0.3), 0 2px 4px rgba(0,0,0,0.8);
   letter-spacing: 0.08em;
   margin: 0;
 }
@@ -433,6 +449,7 @@ onUnmounted(() => {
   border-radius: 16px;
   background: white;
   padding: 8px;
+  box-shadow: 0 0 40px rgba(201,168,76,0.2);
 }
 .lobby-code {
   font-family: var(--font-title);
@@ -475,7 +492,7 @@ onUnmounted(() => {
 /* ── Player Card ─────────────────────────────────────────────────────── */
 .player-card {
   position: relative;
-  background: linear-gradient(160deg, var(--color-surface) 0%, var(--color-surface-alt) 50%, #120d05 100%);
+  background: linear-gradient(160deg, var(--color-surface-soft) 0%, var(--color-surface) 100%);
   border: 1px solid var(--color-border);
   border-radius: 20px;
   padding: 2rem;
@@ -599,8 +616,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  background: rgba(137,196,255,0.1);
-  border: 1px solid rgba(137,196,255,0.3);
+  background: rgba(201,168,76,0.1);
+  border: 1px solid rgba(201,168,76,0.4);
   border-radius: 8px;
   padding: 0.3rem 0.6rem;
 }
@@ -609,7 +626,7 @@ onUnmounted(() => {
   font-family: var(--font-heading);
   font-size: clamp(1rem, 2vw, 1.3rem);
   font-weight: 700;
-  color: #89c4ff;
+  color: var(--color-gold-bright);
 }
 
 .concentration-badge {
@@ -725,14 +742,15 @@ onUnmounted(() => {
   font-family: var(--font-title);
   font-size: clamp(1.5rem, 4vw, 3rem);
   color: var(--color-gold-bright);
+  text-shadow: 0 0 30px rgba(240,192,64,0.5), 0 2px 4px rgba(0,0,0,0.8);
   text-align: center;
   margin: 0;
 }
 .vote-progress {
   font-family: var(--font-heading);
-  font-size: clamp(0.8rem, 2vw, 1.2rem);
+  font-size: clamp(0.9rem, 2vw, 1.3rem);
   letter-spacing: 0.15em;
-  color: var(--color-text-dim);
+  color: var(--color-parchment-dark);
 }
 .vote-results {
   width: 100%;
@@ -752,30 +770,31 @@ onUnmounted(() => {
 }
 .vote-option-label {
   font-family: var(--font-heading);
-  font-size: clamp(0.9rem, 2vw, 1.3rem);
+  font-size: clamp(1rem, 2vw, 1.4rem);
   color: var(--color-parchment);
 }
 .vote-option-count {
   font-family: var(--font-heading);
-  font-size: clamp(0.75rem, 1.5vw, 1rem);
-  color: var(--color-gold-dark);
+  font-size: clamp(0.85rem, 1.5vw, 1.1rem);
+  color: var(--color-gold);
 }
 .vote-bar {
-  height: 20px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 10px;
+  height: 24px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
   overflow: hidden;
 }
 .vote-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--color-gold-dark), var(--color-gold-bright));
-  border-radius: 10px;
+  border-radius: 12px;
   transition: width 0.8s ease;
   box-shadow: 0 0 10px rgba(240,192,64,0.4);
 }
 .voter-names {
   font-family: var(--font-body);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-dim);
   font-style: italic;
 }
@@ -796,9 +815,9 @@ onUnmounted(() => {
 }
 .vote-waiting p {
   font-family: var(--font-heading);
-  font-size: 1.2rem;
+  font-size: clamp(1rem, 2vw, 1.4rem);
   letter-spacing: 0.2em;
-  color: var(--color-text-dim);
+  color: var(--color-parchment);
 }
 
 /* ── Image mode ───────────────────────────────────────────────────────── */
@@ -850,7 +869,7 @@ onUnmounted(() => {
   gap: 1.5rem;
 }
 .merchant-item {
-  background: linear-gradient(160deg, var(--color-surface) 0%, var(--color-surface-alt) 100%);
+  background: linear-gradient(160deg, var(--color-surface-soft) 0%, var(--color-surface) 100%);
   border: 1px solid var(--color-border);
   border-radius: 14px;
   padding: 1.5rem;
@@ -922,7 +941,7 @@ onUnmounted(() => {
   font-size: 0.8rem;
   letter-spacing: 0.4em;
   text-transform: uppercase;
-  color: var(--color-border);
-  opacity: 0.6;
+  color: var(--color-text-dim);
+  opacity: 0.7;
 }
 </style>

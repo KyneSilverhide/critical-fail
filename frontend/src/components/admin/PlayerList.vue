@@ -45,6 +45,9 @@ function kickPlayer(player) {
   if (!confirm(`Expulser ${player.player_name} de la session ?`)) return
   const socket = getSocket()
   socket.emit('kick-player', { playerId: player.id })
+  // Optimistic update: remove the player from the list immediately so the
+  // GM screen reflects the kick even before the server event round-trip.
+  sessionStore.removePlayer(player.id)
 }
 </script>
 
@@ -110,7 +113,7 @@ function kickPlayer(player) {
 
 .ac-badge {
   font-family: var(--font-heading); font-size: 0.65rem; letter-spacing: 0.05em;
-  color: #89c4ff; background: rgba(137,196,255,0.1); border: 1px solid rgba(137,196,255,0.3);
+  color: var(--color-gold-bright); background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.35);
   border-radius: 20px; padding: 0.1rem 0.45rem;
 }
 .hp-text {

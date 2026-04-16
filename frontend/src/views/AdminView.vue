@@ -39,6 +39,13 @@ function logout() {
 onMounted(() => {
   const socket = getSocket(authStore.token)
 
+  // Re-join admin room after socket reconnects so we don't miss events
+  socket.on('connect', () => {
+    if (sessionStore.activeSession?.id) {
+      socket.emit('admin-join', sessionStore.activeSession.id)
+    }
+  })
+
   socket.on('player-joined', (player) => {
     sessionStore.addPlayer(player)
   })
@@ -77,6 +84,7 @@ watch(
 
 onUnmounted(() => {
   const socket = getSocket()
+  socket.off('connect')
   socket.off('player-joined')
   socket.off('player-left')
   socket.off('players-snapshot')

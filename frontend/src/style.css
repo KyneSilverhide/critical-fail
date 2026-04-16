@@ -1,24 +1,32 @@
 :root {
-  --color-bg: #f3f7fc;
-  --color-bg2: #e6edf7;
-  --color-parchment: #0f172a;
-  --color-parchment-dark: #334155;
-  --color-gold: #2563eb;
-  --color-gold-bright: #1d4ed8;
-  --color-gold-dark: #1e40af;
-  --color-red: #b91c1c;
-  --color-red-bright: #dc2626;
-  --color-crimson: #991b1b;
-  --color-text: #1e293b;
-  --color-text-dim: #64748b;
-  --color-border: #cbd5e1;
-  --color-shadow: rgba(15, 23, 42, 0.16);
-  --color-surface: #ffffff;
-  --color-surface-alt: #f8fafc;
-  --color-surface-soft: #eef4ff;
-  --font-title: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
-  --font-heading: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
-  --font-body: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+  /* ── Dark leather/tome background ─────────────────────────────────── */
+  --color-bg: #120d04;
+  --color-bg2: #1a1207;
+  /* ── Warm parchment text ───────────────────────────────────────────── */
+  --color-parchment: #f0e6c8;
+  --color-parchment-dark: #c9b890;
+  /* ── Real gold accents (D&D rulebook style) ────────────────────────── */
+  --color-gold: #c9a84c;
+  --color-gold-bright: #f0c040;
+  --color-gold-dark: #b89030;
+  /* ── Crimson / danger ──────────────────────────────────────────────── */
+  --color-red: #9b1b1b;
+  --color-red-bright: #cc3030;
+  --color-crimson: #7a1010;
+  /* ── Body text ─────────────────────────────────────────────────────── */
+  --color-text: #e8dfc0;
+  --color-text-dim: #9a8766;
+  /* ── Borders: dark warm gold-brown ────────────────────────────────── */
+  --color-border: #3a2c10;
+  --color-shadow: rgba(0, 0, 0, 0.7);
+  /* ── Surface (panel / card) colors ────────────────────────────────── */
+  --color-surface: #1e1508;
+  --color-surface-alt: #170f04;
+  --color-surface-soft: #251c0c;
+  /* ── D&D-inspired fonts ────────────────────────────────────────────── */
+  --font-title: 'Cinzel Decorative', 'Cinzel', Georgia, serif;
+  --font-heading: 'Cinzel', Georgia, serif;
+  --font-body: 'IM Fell English', Georgia, 'Times New Roman', serif;
 }
 
 * {
@@ -38,7 +46,7 @@ body {
   font-family: var(--font-body);
   min-height: 100vh;
   background-image:
-    radial-gradient(circle at top right, #ffffff 0%, #edf3fc 45%, #e4edf9 100%);
+    radial-gradient(ellipse at 50% 0%, #1f1608 0%, #120d04 60%);
 }
 
 #app {
@@ -77,7 +85,7 @@ button:hover:not(:disabled),
 .message-card {
   background: var(--color-surface) !important;
   border-color: var(--color-border) !important;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   animation: fadeUp 0.28s ease both;
 }
 
