@@ -23,13 +23,13 @@ async function loadImages() {
 }
 
 async function handleFileUpload(event) {
-  const file = event.target.files?.[0]
-  if (!file) return
+  const files = Array.from(event.target.files || [])
+  if (files.length === 0) return
   uploading.value = true
   uploadError.value = ''
   try {
     const formData = new FormData()
-    formData.append('file', file)
+    files.forEach(file => formData.append('files', file))
     formData.append('session_id', sessionStore.activeSession.id)
     const res = await fetch(`${BACKEND_URL}/api/uploads`, {
       method: 'POST',
@@ -69,10 +69,11 @@ onMounted(loadImages)
 
     <div class="upload-area">
       <label class="upload-btn">
-        <span>{{ uploading ? '…' : '📁 Téléverser une image' }}</span>
+        <span>{{ uploading ? '…' : '📁 Téléverser des images' }}</span>
         <input
           type="file"
           accept="image/*"
+          multiple
           class="file-input"
           :disabled="uploading"
           @change="handleFileUpload"

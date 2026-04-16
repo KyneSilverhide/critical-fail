@@ -36,15 +36,23 @@ const avatarUpload = multer({
   fileFilter: imageFilter,
 })
 
-router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' })
-  const url = `/uploads/${req.file.filename}`
+router.post('/', authenticateToken, upload.fields([
+  { name: 'file', maxCount: 1 }, // backward compatibility
+  { name: 'files', maxCount: 20 },
+]), async (req, res) => {
+  const uploadedFiles = [...(req.files?.files || []), ...(req.files?.file || [])]
+  if (uploadedFiles.length === 0) return res.status(400).json({ error: 'No file uploaded.' })
+
+  const urls = uploadedFiles.map(file => `/uploads/${file.filename}`)
   if (req.body.session_id) {
     try {
-      await pool.query('INSERT INTO session_images (session_id, url) VALUES ($1, $2)', [req.body.session_id, url])
+      for (const url of urls) {
+        await pool.query('INSERT INTO session_images (session_id, url) VALUES ($1, $2)', [req.body.session_id, url])
+      }
     } catch (err) { console.error(err) }
   }
-  res.json({ url })
+
+  return res.json({ url: urls.length === 1 ? urls[0] : null, urls })
 })
 
 // Public endpoint for player avatar uploads (no admin auth required)

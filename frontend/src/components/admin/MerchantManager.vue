@@ -177,9 +177,11 @@ function submitRespond() {
   if (!respondingRequest.value) return
   const socket = getSocket()
   if (respondingRequest.value.batch_id) {
+    const usesCustomPrice = respondAction.value === 'discount' || respondAction.value === 'increase'
     socket.emit('respond-batch-purchase', {
       batchId: respondingRequest.value.batch_id,
       action: respondAction.value,
+      finalPrice: usesCustomPrice ? respondCustomPrice.value : respondingRequest.value.total_price,
     })
   } else {
     // Legacy single item — supports discount/increase with custom price
@@ -390,13 +392,11 @@ onUnmounted(() => {
             @click="respondAction = 'reject'"
           >❌ Refuser</button>
           <button
-            v-if="!respondingRequest.batch_id"
             class="respond-action-btn discount"
             :class="{ active: respondAction === 'discount' }"
             @click="respondAction = 'discount'"
           >💚 Ristourne</button>
           <button
-            v-if="!respondingRequest.batch_id"
             class="respond-action-btn increase"
             :class="{ active: respondAction === 'increase' }"
             @click="respondAction = 'increase'"
