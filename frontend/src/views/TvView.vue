@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
 
@@ -30,20 +30,6 @@ function hpBarColor(player) {
   if (pct > 50) return '#2fb896'
   if (pct > 20) return '#f0a500'
   return '#e03030'
-}
-function hpStatus(player) {
-  const pct = hpPercent(player)
-  if (pct <= 0) return 'KO'
-  if (pct <= 20) return 'Critique'
-  if (pct <= 50) return 'Blessé'
-  return 'En forme'
-}
-function statusColor(player) {
-  const pct = hpPercent(player)
-  if (pct <= 0) return '#888'
-  if (pct <= 20) return '#e03030'
-  if (pct <= 50) return '#f0a500'
-  return '#2fb896'
 }
 
 function resolveMediaUrl(url) {
@@ -221,7 +207,6 @@ onUnmounted(() => {
       <!-- Lobby mode: session title + QR code + session code -->
       <div v-if="tvMode === 'lobby'" class="lobby-display">
         <header class="tv-header">
-          <div class="header-ornament">⚔</div>
           <h1 class="session-title">{{ session.name }}</h1>
         </header>
         <p class="lobby-title">Rejoignez la partie !</p>
@@ -286,13 +271,6 @@ onUnmounted(() => {
                   :style="{ width: hpPercent(player) + '%', background: hpBarColor(player) }"
                 />
               </div>
-            </div>
-
-            <!-- Status -->
-            <div class="card-footer">
-              <span class="status-badge" :style="{ color: statusColor(player), borderColor: statusColor(player) }">
-                {{ hpStatus(player) }}
-              </span>
             </div>
 
             <!-- Conditions -->
@@ -421,14 +399,6 @@ onUnmounted(() => {
 .tv-header {
   text-align: center;
   margin-bottom: 1rem;
-}
-.header-ornament {
-  font-size: 2rem;
-  color: var(--color-gold-dark);
-  letter-spacing: 1rem;
-  display: block;
-  margin-bottom: 0.5rem;
-  opacity: 0.6;
 }
 .session-title {
   font-family: var(--font-title);
@@ -614,7 +584,7 @@ onUnmounted(() => {
 }
 .class-badge {
   font-family: var(--font-heading);
-  font-size: 0.6rem;
+  font-size: 0.8rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--color-gold-dark);
@@ -681,19 +651,6 @@ onUnmounted(() => {
   box-shadow: 0 0 10px currentColor;
 }
 
-/* Card Footer */
-.card-footer { display: flex; justify-content: flex-end; }
-.status-badge {
-  font-family: var(--font-heading);
-  font-size: 0.75rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  border: 1px solid;
-  border-radius: 20px;
-  padding: 0.2rem 0.7rem;
-  background: rgba(0,0,0,0.2);
-}
-
 /* Conditions row */
 .conditions-row {
   display: flex;
@@ -706,13 +663,13 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.2rem;
   font-family: var(--font-heading);
-  font-size: clamp(0.55rem, 1vw, 0.7rem);
+  font-size: clamp(0.75rem, 1.4vw, 1rem);
   letter-spacing: 0.05em;
   color: #f0a500;
   background: rgba(240,165,0,0.12);
   border: 1px solid rgba(240,165,0,0.4);
   border-radius: 20px;
-  padding: 0.15rem 0.45rem;
+  padding: 0.24rem 0.7rem;
   white-space: nowrap;
 }
 

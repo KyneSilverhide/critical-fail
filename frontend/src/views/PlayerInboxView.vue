@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getSocket, resetSocket } from '../socket.js'
 import { sessionStore } from '../stores/session.js'
@@ -15,10 +15,21 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 // ── Active tab ───────────────────────────────────────────────────────────
 // Tabs: 'combat' | 'boutique' | 'vote' | 'messages'
 const activeTab = ref('combat')
+let hasRequestedNotificationPermission = false
+
+function requestNotificationPermissionOnce() {
+  if (hasRequestedNotificationPermission) return
+  if (typeof window === 'undefined' || !('Notification' in window)) return
+  hasRequestedNotificationPermission = true
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().catch(() => {})
+  }
+}
 
 function switchTab(tab) {
   activeTab.value = tab
   if (tab === 'messages') unreadMessages.value = 0
+  requestNotificationPermissionOnce()
 }
 
 // ── HP tracking ──────────────────────────────────────────────────────────
@@ -115,6 +126,7 @@ const cartSending = ref(false)
 const purchaseResultModal = ref(null) // { type: 'accepted'|'rejected', items, totalPrice }
 // Counter offers (legacy single-item)
 const counterOffers = ref([])
+let attentionAudioContext = null
 
 const cartItemCount = computed(() =>
   Object.values(cart.value).filter(q => q > 0).length
@@ -160,6 +172,65 @@ function respondCounterOffer(requestId, accept) {
 function dismissPurchaseModal() {
   purchaseResultModal.value = null
 }
+
+function shouldAlertUser() {
+  if (typeof document === 'undefined') return false
+  return document.visibilityState !== 'visible' || !document.hasFocus()
+}
+
+function playAttentionSound() {
+  if (typeof window === 'undefined') return
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext
+  if (!AudioContextClass) return
+  if (!attentionAudioContext) attentionAudioContext = new AudioContextClass()
+  if (attentionAudioContext.state === 'suspended') {
+    attentionAudioContext.resume().catch(() => {})
+  }
+  const now = attentionAudioContext.currentTime
+  const osc = attentionAudioContext.createOscillator()
+  const gain = attentionAudioContext.createGain()
+  osc.type = 'triangle'
+  osc.frequency.setValueAtTime(880, now)
+  osc.frequency.exponentialRampToValueAtTime(1320, now + 0.18)
+  gain.gain.setValueAtTime(0.0001, now)
+  gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22)
+  osc.connect(gain)
+  gain.connect(attentionAudioContext.destination)
+  osc.start(now)
+  osc.stop(now + 0.24)
+}
+
+function notifyAttention(message) {
+  if (!shouldAlertUser()) return
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification('Attention MJ', { body: message })
+      return
+    } catch {}
+  }
+  playAttentionSound()
+}
+
+const needsAttention = computed(() => ({
+  combat: activeConditions.value.length > 0 && activeTab.value !== 'combat',
+  boutique: !!activeMerchant.value && activeTab.value !== 'boutique',
+  vote: hasNewVote.value && activeTab.value !== 'vote',
+  messages: unreadMessages.value > 0 && activeTab.value !== 'messages',
+  counterOffer: counterOffers.value.length > 0,
+}))
+
+watch(needsAttention, (next, prev) => {
+  const hadAttention = prev ? Object.values(prev).some(Boolean) : false
+  const hasAttention = Object.values(next).some(Boolean)
+  if (!hasAttention || hadAttention) return
+
+  if (next.counterOffer) notifyAttention('Nouvelle contre-offre du MJ.')
+  else if (next.vote) notifyAttention('Un vote attend votre réponse.')
+  else if (next.messages) notifyAttention('Nouveau message du MJ.')
+  else if (next.boutique) notifyAttention('La boutique est ouverte.')
+  else if (next.combat) notifyAttention('Un onglet demande votre attention.')
+}, { deep: true })
 
 // ── Socket handlers ──────────────────────────────────────────────────────
 const handleNewMessage = (msg) => {
@@ -257,6 +328,7 @@ function handleBeforeUnload() {
 
 onMounted(() => {
   if (!sessionStore.activeSession) { router.push('/join'); return }
+  requestNotificationPermissionOnce()
   const socket = getSocket()
   socket.on('new-message', handleNewMessage)
   socket.on('dice-result', handleDiceResult)
@@ -303,6 +375,10 @@ onUnmounted(() => {
     socket.off('kicked', handleKicked)
   }
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  if (attentionAudioContext) {
+    attentionAudioContext.close().catch(() => {})
+    attentionAudioContext = null
+  }
 })
 </script>
 
@@ -1217,4 +1293,3 @@ onUnmounted(() => {
 }
 .purchase-modal-total strong { color: var(--color-gold-bright); font-size: 1.1rem; }
 </style>
-

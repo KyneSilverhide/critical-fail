@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { authStore } from '../../stores/auth.js'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
@@ -9,6 +9,8 @@ const results = ref([])
 const loading = ref(false)
 const searched = ref(false)
 const searchCache = new Map()
+const MIN_AUTO_SEARCH_LENGTH = 3
+let autoSearchTimer = null
 
 // Parse school + level from "niveau 3 - nécomancie (rituel)" → { level: 3, school: 'Nécromancie', ritual: true }
 function parseEcole(ecole) {
@@ -86,6 +88,24 @@ async function search() {
     searched.value = true
   }
 }
+
+watch(query, () => {
+  if (autoSearchTimer) clearTimeout(autoSearchTimer)
+  const q = query.value.trim()
+  if (q.length < MIN_AUTO_SEARCH_LENGTH) {
+    results.value = []
+    searched.value = false
+    loading.value = false
+    return
+  }
+  autoSearchTimer = setTimeout(() => {
+    search()
+  }, 250)
+})
+
+onUnmounted(() => {
+  if (autoSearchTimer) clearTimeout(autoSearchTimer)
+})
 </script>
 
 <template>

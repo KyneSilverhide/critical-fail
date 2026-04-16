@@ -540,7 +540,7 @@ function setupSocket(io) {
     })
 
     // ── Admin: respond to batch purchase ────────────────────────────────────
-    socket.on('respond-batch-purchase', async ({ batchId, action }) => {
+    socket.on('respond-batch-purchase', async ({ batchId, action, finalPrice }) => {
       if (!socket.admin) return
       try {
         const reqsRes = await pool.query(
@@ -554,29 +554,45 @@ function setupSocket(io) {
         const playerSocketRes = await pool.query('SELECT socket_id FROM players WHERE id = $1', [reqs[0].player_id])
         const playerSocketId = playerSocketRes.rows[0]?.socket_id
 
-        if (action === 'accept') {
-          let totalFinal = 0
-          for (const req of reqs) {
+        if (action === 'accept' || action === 'discount' || action === 'increase') {
+          const baseTotal = reqs.reduce((sum, req) => sum + req.base_price, 0)
+          const parsedFinalPrice = Number(finalPrice)
+          const targetTotal = action === 'accept'
+            ? baseTotal
+            : (Number.isFinite(parsedFinalPrice) ? Math.max(0, Math.round(parsedFinalPrice)) : baseTotal)
+
+          const finalPrices = reqs.map((req, index) => {
+            if (index === reqs.length - 1) return 0
+            if (baseTotal <= 0) return 0
+            return Math.max(0, Math.round((req.base_price / baseTotal) * targetTotal))
+          })
+          const distributed = finalPrices.reduce((sum, p) => sum + p, 0)
+          // Last line gets the remainder to keep the grand total stable despite rounding.
+          finalPrices[reqs.length - 1] = Math.max(0, targetTotal - distributed)
+          const finalTotal = finalPrices.reduce((sum, p) => sum + p, 0)
+
+          for (let i = 0; i < reqs.length; i++) {
+            const req = reqs[i]
             if (req.item_stock !== -1) {
               await pool.query('UPDATE merchant_items SET stock = GREATEST(0, stock - $1) WHERE id = $2', [req.quantity, req.item_id])
             }
-            await pool.query('UPDATE purchase_requests SET status = $1, final_price = $2 WHERE id = $3', ['accepted', req.base_price, req.id])
-            totalFinal += req.base_price
+            await pool.query('UPDATE purchase_requests SET status = $1, final_price = $2 WHERE id = $3', ['accepted', finalPrices[i], req.id])
           }
-          const items = reqs.map(r => ({ item_name: r.item_name, quantity: r.quantity, total_price: r.base_price }))
-          if (playerSocketId) io.to(playerSocketId).emit('batch-accepted', { batchId, items, totalPrice: totalFinal })
+          const items = reqs.map((r, i) => ({ item_name: r.item_name, quantity: r.quantity, total_price: finalPrices[i] }))
+          if (playerSocketId) io.to(playerSocketId).emit('batch-accepted', { batchId, items, totalPrice: finalTotal })
           const merchantData = await getMerchantData(reqs[0].merchant_id)
           socket.emit('merchant-updated', merchantData)
           io.to(`tv:${reqs[0].session_id}`).emit('merchant-items-updated', merchantData)
           io.to(`session:${reqs[0].session_id}`).emit('merchant-items-updated', merchantData)
+          socket.emit('purchase-responded', { batchId, action, totalPrice: finalTotal })
         } else if (action === 'reject') {
           for (const req of reqs) {
             await pool.query('UPDATE purchase_requests SET status = $1 WHERE id = $2', ['rejected', req.id])
           }
           const items = reqs.map(r => ({ item_name: r.item_name, quantity: r.quantity, total_price: r.base_price }))
           if (playerSocketId) io.to(playerSocketId).emit('batch-rejected', { batchId, items })
+          socket.emit('purchase-responded', { batchId, action })
         }
-        socket.emit('purchase-responded', { batchId, action })
       } catch (err) { console.error(err) }
     })
 
