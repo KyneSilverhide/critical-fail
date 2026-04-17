@@ -109,15 +109,16 @@ async function joinSession() {
       })
 
       sessionStore.setActiveSession(data.session)
-      sessionStore.playerInfo = {
-        id: data.player.id,
-        name: data.player.player_name,
-        ac: data.player.ac,
-        hp: data.player.current_hp,
-        maxHp: data.player.max_hp,
-        dndClass: data.player.dnd_class,
-        avatarUrl: data.player.avatar_url,
-      }
+        sessionStore.playerInfo = {
+          id: data.player.id,
+          name: data.player.player_name,
+          ac: data.player.ac,
+          hp: data.player.current_hp,
+          maxHp: data.player.max_hp,
+          initiative: data.player.initiative,
+          dndClass: data.player.dnd_class,
+          avatarUrl: data.player.avatar_url,
+        }
       sessionStore.activeMerchant = data.activeMerchant || null
       router.push('/player')
     })

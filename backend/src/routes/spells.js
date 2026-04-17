@@ -26,7 +26,7 @@ function getSpells() {
 // Pre-load on module import
 getSpells()
 
-router.get('/search', authenticateToken, (req, res) => {
+function handleSearch(req, res) {
   const q = (req.query.q || '').trim().toLowerCase()
   if (!q) return res.json([])
 
@@ -39,7 +39,10 @@ router.get('/search', authenticateToken, (req, res) => {
     return false
   })
 
-  res.json(results.slice(0, 50))
-})
+  return res.json(results.slice(0, 50))
+}
+
+router.get('/search', authenticateToken, handleSearch)
+router.get('/public/search', handleSearch)
 
 module.exports = router

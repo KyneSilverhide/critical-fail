@@ -70,6 +70,10 @@ onMounted(() => {
   socket.on('concentration-updated', ({ playerId, isConcentrating }) => {
     sessionStore.updatePlayerConcentration(playerId, isConcentrating)
   })
+
+  socket.on('initiative-updated', ({ playerId, initiative }) => {
+    sessionStore.updatePlayerInitiative(playerId, initiative)
+  })
 })
 
 watch(
@@ -91,6 +95,7 @@ onUnmounted(() => {
   socket.off('hp-updated')
   socket.off('conditions-updated')
   socket.off('concentration-updated')
+  socket.off('initiative-updated')
 })
 </script>
 
