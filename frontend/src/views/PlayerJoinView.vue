@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getSocket } from '../socket.js'
 import { sessionStore } from '../stores/session.js'
@@ -25,6 +25,12 @@ const DND_CLASSES = [
   'Moine', 'Paladin', 'Rôdeur', 'Roublard',
   'Ensorceleur', 'Occultiste', 'Magicien',
 ]
+
+onMounted(() => {
+  if (sessionStore.activeSession && sessionStore.playerInfo) {
+    router.replace('/player')
+  }
+})
 
 // Auto-fill from localStorage when playerName changes
 watch(playerName, (name) => {

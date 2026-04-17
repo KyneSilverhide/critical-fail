@@ -8,6 +8,7 @@ const TENSION_COLOR_MEDIUM_RATIO = 0.33
 const TENSION_COLOR_HIGH_RATIO = 0.66
 const TENSION_SHAKE_MEDIUM_RATIO = 0.4
 const TENSION_SHAKE_HARD_RATIO = 0.75
+const TEMP_HP_COLOR = '#6aa6e0'
 
 const route = useRoute()
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
@@ -33,13 +34,24 @@ const previousHp = ref({})
 
 function hpPercent(player) {
   if (!player.max_hp) return 100
-  return Math.min(100, Math.max(0, (player.current_hp / player.max_hp) * 100))
+  const displayedBaseHp = Math.min(player.max_hp, Math.max(0, player.current_hp ?? 0))
+  return Math.min(100, Math.max(0, (displayedBaseHp / player.max_hp) * 100))
 }
 function hpBarColor(player) {
+  if (temporaryHp(player) > 0) return TEMP_HP_COLOR
   const pct = hpPercent(player)
   if (pct > 50) return '#2fb896'
   if (pct > 20) return '#f0a500'
   return '#e03030'
+}
+function temporaryHp(player) {
+  return Math.max(0, (player.current_hp ?? 0) - (player.max_hp ?? 0))
+}
+function displayedCurrentHp(player) {
+  const current = Number(player.current_hp ?? 0)
+  const max = Number(player.max_hp)
+  if (!Number.isFinite(max) || max <= 0) return current
+  return Math.min(current, max)
 }
 
 function resolveMediaUrl(url) {
@@ -334,11 +346,12 @@ onUnmounted(() => {
             <div class="hp-section">
               <div class="hp-numbers">
                 <span class="hp-current" :style="{ color: hpBarColor(player) }">
-                  {{ player.current_hp ?? 0 }}
+                  {{ displayedCurrentHp(player) }}
                 </span>
                 <span class="hp-separator">/</span>
                 <span class="hp-max">{{ player.max_hp ?? 0 }}</span>
                 <span class="hp-label">PV</span>
+                <span v-if="temporaryHp(player) > 0" class="hp-temp">+{{ temporaryHp(player) }} TEMP</span>
               </div>
               <div class="hp-track">
                 <div
@@ -472,6 +485,12 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+:global(#app) {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
 .tv-wrapper {
   min-height: 100vh;
   background: var(--color-bg);
@@ -771,6 +790,14 @@ onUnmounted(() => {
   text-transform: uppercase;
   color: var(--color-text-dim);
   margin-left: 0.25rem;
+}
+.hp-temp {
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ed3ff;
+  margin-left: 0.45rem;
 }
 
 .hp-track {
