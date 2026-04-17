@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getSocket, resetSocket } from '../socket.js'
 import { sessionStore } from '../stores/session.js'
@@ -7,7 +7,7 @@ import MessageCard from '../components/player/MessageCard.vue'
 import SpellSearchTool from '../components/player/SpellSearchTool.vue'
 import PlayerNotesTool from '../components/player/PlayerNotesTool.vue'
 import { getLastKnownPlayer, saveLastKnownPlayer, removeLastKnownPlayer } from '../utils/playerSessionMemory.js'
-import { getThemePreference, setThemePreference } from '../utils/themePreferences.js'
+import { applyTheme, getThemePreference, setThemePreference } from '../utils/themePreferences.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -18,7 +18,7 @@ const sessionName = ref(sessionStore.activeSession?.name || 'Session')
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 const INITIATIVE_MIN = -10
 const INITIATIVE_MAX = 99
-const TEMP_HP_COLOR = '#6aa6e0'
+const TEMP_HP_COLOR = 'var(--player-info-text)'
 const MAX_HP_LIMIT = 9999
 
 // ── Active tab ───────────────────────────────────────────────────────────
@@ -29,10 +29,47 @@ const rejoinError = ref('')
 const rejoining = ref(false)
 const theme = ref(getThemePreference('player', 'dark'))
 const isLightTheme = computed(() => theme.value === 'light')
+const notificationPermission = ref(readNotificationPermission())
+const attentionToasts = ref([])
+let attentionToastId = 0
 
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
   setThemePreference('player', theme.value)
+  applyTheme(theme.value)
+}
+
+function readNotificationPermission() {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
+  return Notification.permission
+}
+
+function canUseSystemNotifications() {
+  if (typeof window === 'undefined' || !('Notification' in window)) return false
+  return window.isSecureContext || ['localhost', '127.0.0.1'].includes(window.location.hostname)
+}
+
+const notificationButtonLabel = computed(() => {
+  if (notificationPermission.value === 'granted') return '🔔 OK'
+  if (notificationPermission.value === 'denied') return '🔕 Bloquées'
+  if (notificationPermission.value === 'unsupported') return '🔕 Indispo'
+  return '🔔 Notifs'
+})
+
+const notificationButtonClass = computed(() => {
+  if (notificationPermission.value === 'granted') return 'is-ready'
+  if (notificationPermission.value === 'denied' || notificationPermission.value === 'unsupported') return 'is-blocked'
+  return 'is-pending'
+})
+
+function pushAttentionToast(title, message, tone = 'info', duration = 3600) {
+  const id = ++attentionToastId
+  attentionToasts.value = [...attentionToasts.value, { id, title, message, tone }]
+  window.setTimeout(() => dismissAttentionToast(id), duration)
+}
+
+function dismissAttentionToast(id) {
+  attentionToasts.value = attentionToasts.value.filter(toast => toast.id !== id)
 }
 
 function currentSessionCode() {
@@ -111,19 +148,58 @@ async function rejoinFromKnownPlayer(sessionCode) {
   })
 }
 
-function requestNotificationPermissionOnce() {
-  if (hasRequestedNotificationPermission) return
-  if (typeof window === 'undefined' || !('Notification' in window)) return
+async function requestNotificationPermissionOnce({ interactive = false } = {}) {
+  if (notificationPermission.value === 'granted') return notificationPermission.value
+
+  if (notificationPermission.value === 'unsupported') {
+    if (interactive) {
+      pushAttentionToast('Notifications indisponibles', 'Ce navigateur ne prend pas en charge les notifications locales.', 'warning')
+    }
+    return notificationPermission.value
+  }
+
+  if (!canUseSystemNotifications()) {
+    if (interactive) {
+      pushAttentionToast('Notifications limitées', 'Les notifications système nécessitent un accès HTTPS ou localhost.', 'warning')
+    }
+    return notificationPermission.value
+  }
+
+  if (Notification.permission !== 'default') {
+    notificationPermission.value = Notification.permission
+    if (interactive && notificationPermission.value === 'denied') {
+      pushAttentionToast('Notifications bloquées', 'Autorisez-les dans les réglages du navigateur si vous voulez des alertes en arrière-plan.', 'danger')
+    }
+    return notificationPermission.value
+  }
+
+  if (hasRequestedNotificationPermission) return notificationPermission.value
+
   hasRequestedNotificationPermission = true
-  if (Notification.permission === 'default') {
-    Notification.requestPermission().catch(() => {})
+  try {
+    notificationPermission.value = await Notification.requestPermission()
+  } catch {
+    notificationPermission.value = 'denied'
+  }
+
+  if (interactive && notificationPermission.value === 'denied') {
+    pushAttentionToast('Notifications refusées', 'Vous continuerez de voir les alertes directement dans l’interface.', 'warning')
+  }
+
+  return notificationPermission.value
+}
+
+async function handleNotificationButton() {
+  const permission = await requestNotificationPermissionOnce({ interactive: true })
+  if (permission === 'granted') {
+    pushAttentionToast('Notifications prêtes', 'Vous verrez désormais des alertes locales quand le MJ vous contacte.', 'success')
   }
 }
 
 function switchTab(tab) {
   activeTab.value = tab
   if (tab === 'messages') unreadMessages.value = 0
-  requestNotificationPermissionOnce()
+  requestNotificationPermissionOnce({ interactive: true }).catch(() => {})
 }
 
 // ── HP tracking ──────────────────────────────────────────────────────────
@@ -155,9 +231,9 @@ const confirmedDisplayedHp = computed(() => Math.min(currentHp.value, maxHp.valu
 const hpBarColor = computed(() => {
   if (temporaryHp.value > 0) return TEMP_HP_COLOR
   const pct = hpPercent.value
-  if (pct > 50) return '#2fb896'
-  if (pct > 20) return '#f0a500'
-  return '#e03030'
+  if (pct > 50) return 'var(--player-success-text)'
+  if (pct > 20) return 'var(--player-warning-text)'
+  return 'var(--player-danger-text)'
 })
 
 // ── Concentration ────────────────────────────────────────────────────────
@@ -325,44 +401,32 @@ function playAttentionSound() {
 }
 
 function notifyAttention(message) {
+  pushAttentionToast('Attention MJ', message, 'info')
   if (!shouldAlertUser()) return
-  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+  if (typeof window !== 'undefined' && 'Notification' in window && canUseSystemNotifications() && notificationPermission.value === 'granted') {
     try {
-      new Notification('Attention MJ', { body: message })
+      new Notification('Attention MJ', {
+        body: message,
+        tag: 'dm-toolkit-attention',
+        icon: '/favicon.svg',
+        badge: '/favicon.svg',
+      })
       return
     } catch {}
   }
   playAttentionSound()
 }
 
-const needsAttention = computed(() => ({
-  combat: activeConditions.value.length > 0 && activeTab.value !== 'combat',
-  boutique: !!activeMerchant.value && activeTab.value !== 'boutique',
-  vote: hasNewVote.value && activeTab.value !== 'vote',
-  messages: unreadMessages.value > 0 && activeTab.value !== 'messages',
-  counterOffer: counterOffers.value.length > 0,
-}))
-
-watch(needsAttention, (next, prev) => {
-  const hadAttention = prev ? Object.values(prev).some(Boolean) : false
-  const hasAttention = Object.values(next).some(Boolean)
-  if (!hasAttention || hadAttention) return
-
-  if (next.counterOffer) notifyAttention('Nouvelle contre-offre du MJ.')
-  else if (next.vote) notifyAttention('Un vote attend votre réponse.')
-  else if (next.messages) notifyAttention('Nouveau message du MJ.')
-  else if (next.boutique) notifyAttention('La boutique est ouverte.')
-  else if (next.combat) notifyAttention('Un onglet demande votre attention.')
-}, { deep: true })
-
 // ── Socket handlers ──────────────────────────────────────────────────────
 const handleNewMessage = (msg) => {
   messages.value.push({ ...msg, kind: 'message' })
   if (activeTab.value !== 'messages') unreadMessages.value++
+  notifyAttention(msg?.fromName ? `Nouveau message de ${msg.fromName}.` : 'Nouveau message du MJ.')
 }
 const handleDiceResult = (data) => {
   messages.value.push({ ...data, kind: 'dice' })
   if (activeTab.value !== 'messages') unreadMessages.value++
+  notifyAttention(`Résultat Critical Fail (${data?.combatType || 'attaque'}).`)
 }
 const handleHpConfirmed = (data) => {
   currentHp.value = data.newHp
@@ -386,11 +450,13 @@ const handleInitiativeConfirmed = (data) => {
 }
 const handleConcentrationWarning = (data) => {
   concentrationModal.value = data
+  pushAttentionToast('Jet de concentration', `Subissez ${data.damage} dégâts — DD ${data.dc}.`, 'warning')
 }
 const handleVoteStarted = (voteData) => {
   activeVote.value = { ...voteData, isClosed: false }
   myVote.value = null
   hasNewVote.value = true
+  notifyAttention(voteData?.question ? `Un vote attend votre réponse : ${voteData.question}` : 'Un vote attend votre réponse.')
 }
 const handleVoteClosed = (voteData) => {
   activeVote.value = { ...voteData, isClosed: true }
@@ -403,6 +469,7 @@ const handleMerchantShown = (data) => {
   activeMerchant.value = data
   cart.value = {}
   cartSending.value = false
+  notifyAttention(data?.name ? `La boutique « ${data.name} » est ouverte.` : 'La boutique est ouverte.')
 }
 const handleMerchantClosed = () => {
   activeMerchant.value = null
@@ -421,15 +488,18 @@ const handleBatchAccepted = ({ items, totalPrice }) => {
   cartSending.value = false
   cart.value = {}
   purchaseResultModal.value = { type: 'accepted', items, totalPrice }
+  pushAttentionToast('Achat accepté', 'Le MJ a validé votre demande.', 'success')
 }
 const handleBatchRejected = ({ items }) => {
   cartSending.value = false
   cart.value = {}
   purchaseResultModal.value = { type: 'rejected', items }
+  pushAttentionToast('Achat refusé', 'Le MJ a refusé votre demande.', 'danger')
 }
 const handlePurchaseCounterOffer = (data) => {
   cartSending.value = false
   counterOffers.value.push(data)
+  notifyAttention(data?.itemName ? `Nouvelle contre-offre pour ${data.itemName}.` : 'Nouvelle contre-offre du MJ.')
 }
 const handleCounterOfferResult = ({ accepted, itemName, finalPrice }) => {
   if (accepted) {
@@ -441,6 +511,7 @@ const handleCounterOfferResult = ({ accepted, itemName, finalPrice }) => {
 const handlePurchaseError = ({ message }) => {
   cartSending.value = false
   purchaseResultModal.value = { type: 'error', message }
+  pushAttentionToast('Erreur boutique', message || 'Impossible de traiter la demande.', 'danger')
 }
 
 function handleKicked() {
@@ -475,7 +546,7 @@ onMounted(async () => {
     router.replace(`/view/${activeCode}`)
   }
 
-  requestNotificationPermissionOnce()
+  notificationPermission.value = readNotificationPermission()
   const socket = getSocket()
   socket.on('new-message', handleNewMessage)
   socket.on('dice-result', handleDiceResult)
@@ -532,7 +603,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="inbox-wrapper" :class="{ 'theme-light': isLightTheme }">
+  <div class="inbox-wrapper">
 
     <!-- ── Concentration modal ───────────────────────────────────────────── -->
     <Teleport to="body">
@@ -598,6 +669,9 @@ onUnmounted(() => {
       </div>
       <div class="header-right">
         <span class="ac-chip">🛡️ {{ playerInfo?.ac ?? 10 }}</span>
+        <button class="notify-btn" :class="notificationButtonClass" @click="handleNotificationButton">
+          {{ notificationButtonLabel }}
+        </button>
         <button class="theme-toggle-btn" @click="toggleTheme">
           {{ isLightTheme ? '🌙 Sombre' : '☀️ Clair' }}
         </button>
@@ -847,6 +921,19 @@ onUnmounted(() => {
 
     </main>
 
+    <TransitionGroup name="toast" tag="div" class="toast-stack">
+      <button
+        v-for="toast in attentionToasts"
+        :key="toast.id"
+        class="attention-toast"
+        :class="`tone-${toast.tone}`"
+        @click="dismissAttentionToast(toast.id)"
+      >
+        <span class="toast-title">{{ toast.title }}</span>
+        <span class="toast-message">{{ toast.message }}</span>
+      </button>
+    </TransitionGroup>
+
     <!-- ── Bottom tab bar ────────────────────────────────────────────────── -->
     <nav v-if="!rejoining && !rejoinError" class="tab-bar">
       <button
@@ -908,26 +995,34 @@ onUnmounted(() => {
   height: 100dvh;
   overflow: hidden;
   background: var(--color-bg);
-}
-
-.inbox-wrapper.theme-light {
-  --color-bg: #f3ecde;
-  --color-bg2: #ece2d0;
-  --color-parchment: #2f2416;
-  --color-parchment-dark: #6d5a40;
-  --color-gold: #9c7129;
-  --color-gold-bright: #b5822f;
-  --color-gold-dark: #8f6927;
-  --color-red: #b04141;
-  --color-red-bright: #c65252;
-  --color-crimson: #933131;
-  --color-text: #3b2e1e;
-  --color-text-dim: #6f5e47;
-  --color-border: #ccbca0;
-  --color-shadow: rgba(50, 36, 18, 0.18);
-  --color-surface: #fff8ea;
-  --color-surface-alt: #f5ecdd;
-  --color-surface-soft: #efe2cd;
+  color: var(--color-text);
+  --player-panel-bg: var(--gradient-panel);
+  --player-panel-highlight-bg: var(--gradient-panel-soft);
+  --player-header-bg: var(--surface-highlight);
+  --player-control-bg: var(--surface-raised);
+  --player-control-bg-muted: var(--surface-ghost);
+  --player-avatar-bg: var(--surface-highlight);
+  --player-track-bg: var(--surface-track);
+  --player-gold-bg: var(--surface-gold-soft);
+  --player-gold-bg-strong: var(--surface-gold-soft-strong);
+  --player-success-bg: var(--color-success-soft);
+  --player-success-border: var(--color-success-border);
+  --player-success-text: var(--color-success);
+  --player-warning-bg: var(--color-warning-soft);
+  --player-warning-border: var(--color-warning-border);
+  --player-warning-text: var(--color-warning);
+  --player-info-bg: var(--color-info-soft);
+  --player-info-border: var(--color-info-border);
+  --player-info-text: var(--color-info-bright);
+  --player-danger-bg: var(--color-danger-soft);
+  --player-danger-border: var(--color-danger-border);
+  --player-danger-text: var(--color-danger);
+  --player-modal-overlay: var(--surface-overlay);
+  --player-toast-bg: var(--gradient-panel-soft);
+  --player-toast-border: var(--color-border);
+  --player-toast-shadow: var(--shadow-medium);
+  --notes-canvas-bg: var(--player-control-bg-muted);
+  --notes-draw-color: var(--color-parchment);
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
@@ -936,7 +1031,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  background: var(--color-surface-alt);
+  background: var(--player-header-bg);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   gap: 0.75rem;
@@ -944,6 +1039,7 @@ onUnmounted(() => {
 .header-left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .header-right { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
 
+.notify-btn,
 .theme-toggle-btn {
   background: none;
   border: 1px solid var(--color-border);
@@ -957,9 +1053,28 @@ onUnmounted(() => {
   text-transform: uppercase;
   white-space: nowrap;
 }
+.notify-btn:hover,
 .theme-toggle-btn:hover {
   color: var(--color-gold-bright);
   border-color: var(--color-gold-dark);
+}
+
+.notify-btn.is-ready {
+  color: var(--player-success-text);
+  border-color: var(--player-success-border);
+  background: var(--player-success-bg);
+}
+
+.notify-btn.is-blocked {
+  color: var(--player-danger-text);
+  border-color: var(--player-danger-border);
+  background: var(--player-danger-bg);
+}
+
+.notify-btn.is-pending {
+  color: var(--player-warning-text);
+  border-color: var(--player-warning-border);
+  background: var(--player-warning-bg);
 }
 
 .player-avatar-wrap {
@@ -967,7 +1082,7 @@ onUnmounted(() => {
   border-radius: 50%;
   border: 2px solid var(--color-gold-dark);
   overflow: hidden;
-  background: rgba(255,255,255,0.07);
+  background: var(--player-avatar-bg);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -997,8 +1112,8 @@ onUnmounted(() => {
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   color: var(--color-gold-bright);
-  background: rgba(201,168,76,0.1);
-  border: 1px solid rgba(201,168,76,0.4);
+  background: var(--player-gold-bg);
+  border: 1px solid var(--color-gold-dark);
   border-radius: 20px;
   padding: 0.2rem 0.6rem;
   white-space: nowrap;
@@ -1017,7 +1132,7 @@ onUnmounted(() => {
   transition: all 0.2s;
   white-space: nowrap;
 }
-.leave-btn:hover { border-color: var(--color-red); color: #ff6b6b; }
+.leave-btn:hover { border-color: var(--player-danger-border); color: var(--player-danger-text); }
 
 .resume-state {
   flex: 1;
@@ -1049,7 +1164,7 @@ onUnmounted(() => {
   padding: 0.7rem 1rem;
   border-radius: 8px;
   border: 1px solid var(--color-gold-dark);
-  background: rgba(180,120,20,0.15);
+  background: var(--player-gold-bg);
   color: var(--color-gold);
   font-family: var(--font-heading);
   font-size: 0.75rem;
@@ -1057,9 +1172,7 @@ onUnmounted(() => {
   text-transform: uppercase;
   cursor: pointer;
 }
-.resume-action-btn:hover {
-  background: rgba(180,120,20,0.3);
-}
+.resume-action-btn:hover { background: var(--player-gold-bg-strong); }
 
 /* ── Scrollable content ──────────────────────────────────────────────── */
 .inbox-content {
@@ -1076,10 +1189,11 @@ onUnmounted(() => {
 
 /* ── Panel cards ─────────────────────────────────────────────────────── */
 .panel {
-  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
+  background: var(--player-panel-bg);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1rem;
+  box-shadow: var(--shadow-soft);
 }
 .panel-label {
   font-family: var(--font-heading);
@@ -1107,11 +1221,11 @@ onUnmounted(() => {
 .hp-temp {
   font-family: var(--font-heading);
   font-size: 0.72rem;
-  color: #9ed3ff;
+  color: var(--player-info-text);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.hp-bar-track { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
+.hp-bar-track { height: 8px; background: var(--player-track-bg); border-radius: 4px; overflow: hidden; }
 .hp-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease, background 0.4s ease; }
 .hp-controls {
   display: flex;
@@ -1123,20 +1237,20 @@ onUnmounted(() => {
   height: 40px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.05);
+  background: var(--player-control-bg);
   color: var(--color-parchment);
   font-family: var(--font-heading);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.15s;
 }
-.hp-btn.minus:hover { border-color: #e03030; color: #e03030; background: rgba(224,48,48,0.1); }
-.hp-btn.plus:hover { border-color: #2fb896; color: #2fb896; background: rgba(47,184,150,0.1); }
+.hp-btn.minus:hover { border-color: var(--player-danger-border); color: var(--player-danger-text); background: var(--player-danger-bg); }
+.hp-btn.plus:hover { border-color: var(--player-success-border); color: var(--player-success-text); background: var(--player-success-bg); }
 .hp-input {
   flex: 2;
   height: 40px;
   text-align: center;
-  background: rgba(255,255,255,0.06);
+  background: var(--player-control-bg);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   color: var(--color-parchment);
@@ -1151,7 +1265,7 @@ onUnmounted(() => {
   padding: 0.6rem;
   border-radius: 8px;
   border: 1px solid var(--color-gold-dark);
-  background: rgba(180,120,20,0.15);
+  background: var(--player-gold-bg);
   color: var(--color-gold);
   font-family: var(--font-heading);
   font-size: 0.8rem;
@@ -1160,9 +1274,9 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s;
 }
-.hp-send-btn:hover:not(:disabled) { background: rgba(180,120,20,0.3); }
+.hp-send-btn:hover:not(:disabled) { background: var(--player-gold-bg-strong); }
 .hp-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.hp-send-btn.sent { border-color: #2fb896; background: rgba(47,184,150,0.15); color: #2fb896; }
+.hp-send-btn.sent { border-color: var(--player-success-border); background: var(--player-success-bg); color: var(--player-success-text); }
 
 /* ── Initiative ──────────────────────────────────────────────────────── */
 .initiative-panel { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -1171,7 +1285,7 @@ onUnmounted(() => {
   flex: 1;
   height: 40px;
   text-align: center;
-  background: rgba(255,255,255,0.06);
+  background: var(--player-control-bg);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   color: var(--color-parchment);
@@ -1180,12 +1294,12 @@ onUnmounted(() => {
   font-weight: 700;
   outline: none;
 }
-.initiative-input:focus { border-color: #6aa6e0; }
+.initiative-input:focus { border-color: var(--player-info-border); }
 .initiative-send-btn {
-  border: 1px solid #6aa6e0;
+  border: 1px solid var(--player-info-border);
   border-radius: 8px;
-  background: rgba(100,150,220,0.14);
-  color: #9ed3ff;
+  background: var(--player-info-bg);
+  color: var(--player-info-text);
   font-family: var(--font-heading);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
@@ -1195,7 +1309,7 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .initiative-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.initiative-send-btn.sent { border-color: #2fb896; color: #2fb896; background: rgba(47,184,150,0.15); }
+.initiative-send-btn.sent { border-color: var(--player-success-border); color: var(--player-success-text); background: var(--player-success-bg); }
 
 /* ── Concentration ───────────────────────────────────────────────────── */
 .concentration-btn {
@@ -1206,7 +1320,7 @@ onUnmounted(() => {
   padding: 0.85rem 1rem;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.04);
+  background: var(--player-control-bg-muted);
   color: var(--color-text-dim);
   font-family: var(--font-heading);
   cursor: pointer;
@@ -1218,9 +1332,9 @@ onUnmounted(() => {
   color: var(--color-parchment);
 }
 .concentration-btn.active {
-  border-color: #7b5ea7;
-  background: rgba(123,94,167,0.15);
-  box-shadow: 0 0 12px rgba(123,94,167,0.2);
+  border-color: var(--player-info-border);
+  background: var(--player-info-bg);
+  box-shadow: var(--shadow-soft);
 }
 .concentration-icon { font-size: 1.3rem; flex-shrink: 0; }
 .concentration-text { flex: 1; }
@@ -1232,20 +1346,20 @@ onUnmounted(() => {
   color: var(--color-text-dim);
   margin-top: 0.1rem;
 }
-.concentration-btn.active .conc-state { color: #b89ee8; }
+.concentration-btn.active .conc-state { color: var(--player-info-text); }
 .conc-toggle {
   font-size: 0.65rem;
   letter-spacing: 0.08em;
   color: var(--color-text-dim);
   flex-shrink: 0;
 }
-.concentration-btn.active .conc-toggle { color: #b89ee8; }
+.concentration-btn.active .conc-toggle { color: var(--player-info-text); }
 
 /* ── Counter offers ──────────────────────────────────────────────────── */
 .counter-offers-panel { display: flex; flex-direction: column; gap: 0.6rem; }
 .counter-offer {
-  background: rgba(47,184,150,0.06);
-  border: 1px solid rgba(47,184,150,0.3);
+  background: var(--player-success-bg);
+  border: 1px solid var(--player-success-border);
   border-radius: 8px;
   padding: 0.65rem;
   display: flex;
@@ -1254,17 +1368,17 @@ onUnmounted(() => {
 }
 .offer-text { font-family: var(--font-body); font-size: 0.85rem; color: var(--color-text-dim); margin: 0; }
 .offer-text strong { color: var(--color-parchment); }
-.offer-price { color: #2fb896 !important; }
+.offer-price { color: var(--player-success-text) !important; }
 .offer-actions { display: flex; gap: 0.5rem; }
 .offer-btn {
   flex: 1; padding: 0.45rem;
   border-radius: 6px; font-family: var(--font-heading); font-size: 0.7rem;
   letter-spacing: 0.06em; cursor: pointer; transition: all 0.2s; border: 1px solid;
 }
-.offer-btn.accept { background: rgba(47,184,150,0.1); border-color: #2fb896; color: #2fb896; }
-.offer-btn.accept:hover { background: rgba(47,184,150,0.25); }
-.offer-btn.decline { background: rgba(255,107,107,0.1); border-color: #ff6b6b; color: #ff6b6b; }
-.offer-btn.decline:hover { background: rgba(255,107,107,0.2); }
+.offer-btn.accept { background: var(--player-success-bg); border-color: var(--player-success-border); color: var(--player-success-text); }
+.offer-btn.accept:hover { filter: brightness(1.08); }
+.offer-btn.decline { background: var(--player-danger-bg); border-color: var(--player-danger-border); color: var(--player-danger-text); }
+.offer-btn.decline:hover { filter: brightness(1.05); }
 
 /* ── Conditions ──────────────────────────────────────────────────────── */
 .conditions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
@@ -1276,7 +1390,7 @@ onUnmounted(() => {
   padding: 0.6rem 0.4rem;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.03);
+  background: var(--player-control-bg-muted);
   color: var(--color-text-dim);
   font-family: var(--font-heading);
   font-size: 0.6rem;
@@ -1284,11 +1398,11 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s;
 }
-.condition-btn:hover { border-color: #f0a500; color: #f0a500; }
+.condition-btn:hover { border-color: var(--player-warning-border); color: var(--player-warning-text); }
 .condition-btn.active {
-  border-color: #e03030;
-  background: rgba(224,48,48,0.15);
-  color: #ff6060;
+  border-color: var(--player-danger-border);
+  background: var(--player-danger-bg);
+  color: var(--player-danger-text);
 }
 .cond-icon { font-size: 1.1rem; }
 .cond-label { text-align: center; line-height: 1.2; white-space: nowrap; }
@@ -1311,7 +1425,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.65rem 0.5rem;
-  background: rgba(255,255,255,0.03);
+  background: var(--player-control-bg-muted);
   border: 1px solid var(--color-border);
   border-radius: 8px;
 }
@@ -1331,14 +1445,14 @@ onUnmounted(() => {
 .shop-item-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 .shop-item-price { font-family: var(--font-title); font-size: 0.95rem; color: var(--color-gold-bright); }
 .shop-item-stock { font-family: var(--font-heading); font-size: 0.6rem; color: var(--color-text-dim); }
-.shop-item-stock.empty { color: #ff6b6b; }
+.shop-item-stock.empty { color: var(--player-danger-text); }
 
 .qty-controls { display: flex; align-items: center; gap: 0.3rem; }
 .qty-btn {
   width: 28px; height: 28px;
   border-radius: 6px;
   border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.05);
+  background: var(--player-control-bg);
   color: var(--color-parchment);
   font-size: 1rem;
   cursor: pointer;
@@ -1360,9 +1474,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  border-color: rgba(201,168,76,0.2);
+  border-color: var(--color-gold-dark);
 }
-.cart-panel.cart-active { border-color: rgba(201,168,76,0.45); background: linear-gradient(160deg, var(--color-surface-soft), var(--color-surface)); }
+.cart-panel.cart-active { border-color: var(--color-gold-dark); background: var(--player-panel-highlight-bg); }
 .cart-summary { display: flex; align-items: center; justify-content: space-between; }
 .cart-label { font-family: var(--font-heading); font-size: 0.75rem; letter-spacing: 0.1em; color: var(--color-text-dim); }
 .cart-total { font-family: var(--font-title); font-size: 1.1rem; color: var(--color-gold-bright); }
@@ -1372,7 +1486,7 @@ onUnmounted(() => {
   padding: 0.65rem;
   border-radius: 8px;
   border: 1px solid var(--color-gold-dark);
-  background: rgba(180,120,20,0.15);
+  background: var(--player-gold-bg);
   color: var(--color-gold);
   font-family: var(--font-heading);
   font-size: 0.8rem;
@@ -1380,7 +1494,7 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s;
 }
-.cart-submit-btn:hover:not(:disabled) { background: rgba(180,120,20,0.3); }
+.cart-submit-btn:hover:not(:disabled) { background: var(--player-gold-bg-strong); }
 .cart-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .cart-clear-btn {
   padding: 0.65rem 0.9rem;
@@ -1393,7 +1507,7 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s;
 }
-.cart-clear-btn:hover { border-color: #cc3030; color: #ff6060; }
+.cart-clear-btn:hover { border-color: var(--player-danger-border); color: var(--player-danger-text); }
 
 /* ── Vote ────────────────────────────────────────────────────────────── */
 .vote-panel { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -1401,8 +1515,8 @@ onUnmounted(() => {
 .vote-options { display: flex; flex-direction: column; gap: 0.5rem; }
 .vote-option-btn {
   padding: 0.7rem 1rem;
-  background: rgba(201,168,76,0.08);
-  border: 1px solid rgba(201,168,76,0.35);
+  background: var(--player-gold-bg);
+  border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   color: var(--color-parchment);
   font-family: var(--font-heading);
@@ -1411,8 +1525,8 @@ onUnmounted(() => {
   transition: all 0.2s;
   text-align: left;
 }
-.vote-option-btn:hover { background: rgba(201,168,76,0.18); border-color: var(--color-gold); color: var(--color-gold-bright); }
-.vote-done { font-family: var(--font-body); font-size: 0.9rem; color: #2fb896; }
+.vote-option-btn:hover { background: var(--player-gold-bg-strong); border-color: var(--color-gold); color: var(--color-gold-bright); }
+.vote-done { font-family: var(--font-body); font-size: 0.9rem; color: var(--player-success-text); }
 .vote-done strong { color: var(--color-parchment); }
 .vote-closed-label { font-family: var(--font-heading); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-dim); margin: 0 0 0.25rem; }
 .vote-result-line { font-family: var(--font-body); font-size: 0.85rem; color: var(--color-text-dim); margin: 0.1rem 0; }
@@ -1438,7 +1552,7 @@ onUnmounted(() => {
 /* ── Tab bar ─────────────────────────────────────────────────────────── */
 .tab-bar {
   display: flex;
-  background: var(--color-surface-alt);
+  background: var(--player-header-bg);
   border-top: 1px solid var(--color-border);
   flex-shrink: 0;
   padding-bottom: env(safe-area-inset-bottom, 0);
@@ -1478,7 +1592,7 @@ onUnmounted(() => {
 }
 .tab-icon-notify {
   animation: iconShake 0.6s ease-in-out infinite alternate;
-  filter: drop-shadow(0 0 6px #e03030);
+  filter: drop-shadow(0 0 6px var(--player-danger-text));
 }
 @keyframes iconShake {
   0% { transform: rotate(-8deg) scale(1.1); }
@@ -1498,13 +1612,13 @@ onUnmounted(() => {
   display: flex; align-items: center; justify-content: center;
 }
 .tab-badge-urgent {
-  background: #e03030;
-  box-shadow: 0 0 8px #e03030, 0 0 16px rgba(224,48,48,0.5);
+  background: var(--player-danger-text);
+  box-shadow: 0 0 8px var(--player-danger-text), 0 0 16px var(--player-danger-bg);
   animation: urgentPulse 1s ease-in-out infinite;
 }
 .tab-badge-pulse {
-  background: #f0a500;
-  box-shadow: 0 0 8px #f0a500, 0 0 16px rgba(240,165,0,0.5);
+  background: var(--player-warning-text);
+  box-shadow: 0 0 8px var(--player-warning-text), 0 0 16px var(--player-warning-bg);
   animation: urgentPulse 0.8s ease-in-out infinite;
 }
 @keyframes urgentPulse {
@@ -1516,7 +1630,7 @@ onUnmounted(() => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.8);
+  background: var(--player-modal-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1524,7 +1638,7 @@ onUnmounted(() => {
   padding: 1rem;
 }
 .modal-box {
-  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
+  background: var(--player-panel-highlight-bg);
   border: 1px solid var(--color-gold-dark);
   border-radius: 16px;
   padding: 2rem 1.5rem;
@@ -1562,21 +1676,21 @@ onUnmounted(() => {
 }
 .dc-badge {
   display: inline-block;
-  background: rgba(123,94,167,0.2);
-  border: 1px solid #7b5ea7;
+  background: var(--player-info-bg);
+  border: 1px solid var(--player-info-border);
   border-radius: 20px;
   padding: 0.2rem 0.7rem;
   font-family: var(--font-heading);
   font-size: 1rem;
   font-weight: 700;
-  color: #b89ee8;
+  color: var(--player-info-text);
   letter-spacing: 0.05em;
 }
 .modal-close-btn {
   padding: 0.7rem 2rem;
   border-radius: 10px;
   border: 1px solid var(--color-gold-dark);
-  background: rgba(180,120,20,0.15);
+  background: var(--player-gold-bg);
   color: var(--color-gold);
   font-family: var(--font-heading);
   font-size: 0.85rem;
@@ -1586,24 +1700,24 @@ onUnmounted(() => {
   transition: all 0.2s;
   margin-top: 0.5rem;
 }
-.modal-close-btn:hover { background: rgba(180,120,20,0.3); }
+.modal-close-btn:hover { background: var(--player-gold-bg-strong); }
 
 /* Concentration modal specifics */
-.concentration-modal { border-color: #7b5ea7; }
-.concentration-modal .modal-title { color: #b89ee8; }
+.concentration-modal { border-color: var(--player-info-border); }
+.concentration-modal .modal-title { color: var(--player-info-text); }
 
 /* Purchase result modal */
-.purchase-modal.accepted { border-color: #2fb896; }
-.purchase-modal.accepted .modal-title { color: #2fb896; }
-.purchase-modal.rejected { border-color: #cc3030; }
-.purchase-modal.rejected .modal-title { color: #ff6b6b; }
+.purchase-modal.accepted { border-color: var(--player-success-border); }
+.purchase-modal.accepted .modal-title { color: var(--player-success-text); }
+.purchase-modal.rejected { border-color: var(--player-danger-border); }
+.purchase-modal.rejected .modal-title { color: var(--player-danger-text); }
 
 .purchase-modal-items {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  background: rgba(255,255,255,0.04);
+  background: var(--player-control-bg);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
@@ -1626,4 +1740,79 @@ onUnmounted(() => {
   margin: 0;
 }
 .purchase-modal-total strong { color: var(--color-gold-bright); font-size: 1.1rem; }
+
+.toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: min(340px, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.attention-toast {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid var(--player-toast-border);
+  background: var(--player-toast-bg);
+  color: var(--color-text);
+  padding: 0.8rem 0.9rem;
+  box-shadow: var(--player-toast-shadow);
+  cursor: pointer;
+}
+
+.attention-toast.tone-success {
+  border-color: var(--player-success-border);
+  background: linear-gradient(160deg, var(--player-panel-highlight-bg), var(--player-success-bg));
+}
+
+.attention-toast.tone-warning {
+  border-color: var(--player-warning-border);
+  background: linear-gradient(160deg, var(--player-panel-highlight-bg), var(--player-warning-bg));
+}
+
+.attention-toast.tone-danger {
+  border-color: var(--player-danger-border);
+  background: linear-gradient(160deg, var(--player-panel-highlight-bg), var(--player-danger-bg));
+}
+
+.toast-title {
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.toast-message {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--color-text-dim);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+@media (max-width: 640px) {
+  .toast-stack {
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+  }
+}
 </style>

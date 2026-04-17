@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { getThemePreference, setThemePreference } from './themePreferences.js'
+import { getThemePreference, setThemePreference, applyTheme } from './themePreferences.js'
 
 const localStorageMock = (() => {
   let store = {}
@@ -18,6 +18,12 @@ Object.defineProperty(globalThis, 'localStorage', {
 beforeEach(() => {
   localStorageMock.clear()
   vi.clearAllMocks()
+  document.documentElement.removeAttribute('data-theme')
+  document.documentElement.style.colorScheme = ''
+  document.head.innerHTML = ''
+  const meta = document.createElement('meta')
+  meta.setAttribute('name', 'theme-color')
+  document.head.appendChild(meta)
 })
 
 describe('themePreferences', () => {
@@ -36,5 +42,13 @@ describe('themePreferences', () => {
   it('ignores invalid themes', () => {
     setThemePreference('tv', 'blue')
     expect(getThemePreference('tv')).toBe('dark')
+  })
+
+  it('applies theme on document and updates theme-color meta', () => {
+    applyTheme('light')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+    expect(document.documentElement.style.colorScheme).toBe('light')
+    const meta = document.querySelector('meta[name="theme-color"]')
+    expect(meta?.getAttribute('content')).toBe('#f5f1e8')
   })
 })

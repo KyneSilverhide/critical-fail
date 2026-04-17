@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { sessionStore } from '../../stores/session.js'
 
 const notesText = ref('')
-const drawColor = ref('#f3e7c2')
+const drawColor = ref('')
 const drawLineWidth = ref(2)
 const drawEnabled = ref(true)
 const CANVAS_DIMENSION_FALLBACK = 1
@@ -33,10 +33,17 @@ function scheduleSave() {
   }, 150)
 }
 
+function resolveThemeColor(variableName, fallback) {
+  if (typeof window === 'undefined') return fallback
+  const source = canvasRef.value || document.documentElement
+  const value = source ? getComputedStyle(source).getPropertyValue(variableName).trim() : ''
+  return value || fallback
+}
+
 function clearCanvas() {
   const canvas = canvasRef.value
   if (!canvas || !ctx) return
-  ctx.fillStyle = '#15110d'
+  ctx.fillStyle = resolveThemeColor('--notes-canvas-bg', 'transparent')
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   scheduleSave()
 }
@@ -64,7 +71,7 @@ function resizeCanvas() {
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.scale(dpr, dpr)
 
-  ctx.fillStyle = '#15110d'
+  ctx.fillStyle = resolveThemeColor('--notes-canvas-bg', 'transparent')
   ctx.fillRect(0, 0, width, height)
   ctx.drawImage(previous, 0, 0, width, height)
 }
@@ -136,6 +143,7 @@ watch(notesText, () => scheduleSave())
 watch(storageKey, () => loadSavedNotes())
 
 onMounted(() => {
+  drawColor.value = resolveThemeColor('--notes-draw-color', resolveThemeColor('--color-parchment', 'currentColor'))
   resizeCanvas()
   loadSavedNotes()
   window.addEventListener('resize', resizeCanvas)
@@ -192,7 +200,7 @@ onUnmounted(() => {
   min-height: 120px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: rgba(255,255,255,0.04);
+  background: var(--player-control-bg, var(--surface-raised));
   color: var(--color-parchment);
   padding: 0.7rem;
   font-family: var(--font-body);
@@ -205,21 +213,21 @@ onUnmounted(() => {
 .tool-btn {
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: rgba(255,255,255,0.05);
+  background: var(--player-control-bg, var(--surface-raised));
   color: var(--color-parchment);
   padding: 0.35rem 0.55rem;
   font-size: 0.68rem;
   cursor: pointer;
   font-family: var(--font-heading);
 }
-.tool-btn.danger { border-color: rgba(224,48,48,0.5); color: #ff6b6b; }
+.tool-btn.danger { border-color: var(--player-danger-border, var(--color-danger-border)); color: var(--player-danger-text, var(--color-danger)); }
 .notes-canvas {
   width: 100%;
   min-height: 220px;
   height: 28dvh;
   border-radius: 10px;
   border: 1px solid var(--color-border);
-  background: #15110d;
+  background: var(--surface-ghost);
   touch-action: none;
   display: block;
 }

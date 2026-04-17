@@ -172,7 +172,7 @@ async function login() {
 .form-input::placeholder { color: var(--color-border); }
 
 .form-error {
-  color: #ff6b6b;
+  color: var(--color-danger);
   font-family: var(--font-body);
   font-size: 0.9rem;
   text-align: center;
@@ -180,8 +180,8 @@ async function login() {
 
 .submit-btn {
   padding: 1rem;
-  background: linear-gradient(160deg, #6b1a1a, #4a0f0f);
-  border: 1px solid #8b2a2a;
+  background: var(--gradient-danger-action);
+  border: 1px solid var(--color-danger-border);
   border-radius: 8px;
   color: var(--color-parchment);
   font-family: var(--font-heading);
@@ -194,8 +194,8 @@ async function login() {
 }
 
 .submit-btn:hover:not(:disabled) {
-  background: linear-gradient(160deg, #8b2a2a, #6b1a1a);
-  box-shadow: 0 4px 20px rgba(139,26,26,0.5);
+  background: var(--gradient-danger-action-hover);
+  box-shadow: var(--shadow-soft);
 }
 
 .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }

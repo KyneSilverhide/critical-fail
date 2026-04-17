@@ -465,13 +465,13 @@ onUnmounted(() => {
 .tab-btn.active, .tab-btn:hover {
   border-color: var(--color-gold-dark);
   color: var(--color-gold-bright);
-  background: rgba(201,168,76,0.08);
+  background: var(--surface-gold-soft);
 }
 
 /* Requests banner */
 .requests-banner {
-  background: linear-gradient(160deg, #1a2a0a, #101808);
-  border: 1px solid rgba(47,184,150,0.4);
+  background: var(--gradient-panel-soft);
+  border: 1px solid var(--color-success-border);
   border-radius: 10px;
   padding: 0.9rem 1rem;
   display: flex;
@@ -483,7 +483,7 @@ onUnmounted(() => {
   font-size: 0.7rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #2fb896;
+  color: var(--color-success);
   margin: 0;
 }
 .request-row {
@@ -491,8 +491,8 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  background: rgba(47,184,150,0.05);
-  border: 1px solid rgba(47,184,150,0.2);
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success-border);
   border-radius: 6px;
   padding: 0.5rem 0.75rem;
 }
@@ -502,7 +502,7 @@ onUnmounted(() => {
   color: var(--color-parchment);
   flex: 1;
 }
-.request-player { color: #2fb896; }
+.request-player { color: var(--color-success); }
 .request-items-list {
   margin: 0.3rem 0 0.3rem 1rem;
   padding: 0;
@@ -519,10 +519,10 @@ onUnmounted(() => {
 }
 .respond-btn {
   padding: 0.3rem 0.7rem;
-  background: rgba(47,184,150,0.1);
-  border: 1px solid #2fb896;
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success-border);
   border-radius: 6px;
-  color: #2fb896;
+  color: var(--color-success);
   font-family: var(--font-heading);
   font-size: 0.65rem;
   letter-spacing: 0.08em;
@@ -530,7 +530,7 @@ onUnmounted(() => {
   white-space: nowrap;
   transition: all 0.2s;
 }
-.respond-btn:hover { background: rgba(47,184,150,0.25); }
+.respond-btn:hover { background: color-mix(in oklab, var(--color-success-soft) 75%, var(--surface-highlight)); }
 
 /* Create form */
 .create-form {
@@ -607,20 +607,20 @@ onUnmounted(() => {
 .item-cat-input { flex: 1; min-width: 80px; }
 .remove-btn {
   background: none;
-  border: 1px solid #8b2a2a;
+  border: 1px solid var(--color-danger-border);
   border-radius: 4px;
-  color: #ff6b6b;
+  color: var(--color-danger);
   padding: 0.3rem 0.5rem;
   cursor: pointer;
   font-size: 0.7rem;
   flex-shrink: 0;
   transition: all 0.2s;
 }
-.remove-btn:hover { background: rgba(139,42,42,0.2); }
+.remove-btn:hover { background: var(--color-danger-soft); }
 
 .action-btn {
   padding: 0.55rem 1rem;
-  background: linear-gradient(160deg, #4a2010, #2e1008);
+  background: var(--gradient-accent-action);
   border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   color: var(--color-gold-bright);
@@ -631,7 +631,7 @@ onUnmounted(() => {
   transition: all 0.2s;
   width: 100%;
 }
-.action-btn:hover:not(:disabled) { background: linear-gradient(160deg, #6b3020, #4a1e10); }
+.action-btn:hover:not(:disabled) { background: var(--gradient-accent-action-hover); }
 .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Merchants list */
@@ -673,8 +673,8 @@ onUnmounted(() => {
 }
 .show-tv-btn {
   padding: 0.35rem 0.75rem;
-  background: rgba(201,168,76,0.08);
-  border: 1px solid rgba(201,168,76,0.3);
+  background: var(--surface-gold-soft);
+  border: 1px solid var(--color-gold-dark);
   border-radius: 6px;
   color: var(--color-gold);
   font-family: var(--font-heading);
@@ -685,14 +685,14 @@ onUnmounted(() => {
   transition: all 0.2s;
   flex-shrink: 0;
 }
-.show-tv-btn:hover { background: rgba(201,168,76,0.18); border-color: var(--color-gold-bright); color: var(--color-gold-bright); }
+.show-tv-btn:hover { background: var(--surface-gold-soft-strong); border-color: var(--color-gold-bright); color: var(--color-gold-bright); }
 
 .close-merchant-btn {
   padding: 0.35rem 0.75rem;
-  background: rgba(200,48,48,0.08);
-  border: 1px solid rgba(200,48,48,0.4);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger-border);
   border-radius: 6px;
-  color: #ff6b6b;
+  color: var(--color-danger);
   font-family: var(--font-heading);
   font-size: 0.65rem;
   letter-spacing: 0.06em;
@@ -701,7 +701,7 @@ onUnmounted(() => {
   transition: all 0.2s;
   flex-shrink: 0;
 }
-.close-merchant-btn:hover { background: rgba(200,48,48,0.2); border-color: #ff6b6b; }
+.close-merchant-btn:hover { background: color-mix(in oklab, var(--color-danger-soft) 70%, var(--surface-highlight)); border-color: var(--color-danger); }
 
 .merchant-items-preview {
   display: flex;
@@ -715,7 +715,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.25rem 0.4rem;
-  background: rgba(255,255,255,0.03);
+  background: var(--surface-ghost);
   border-radius: 4px;
   font-family: var(--font-heading);
   font-size: 0.65rem;
@@ -736,13 +736,13 @@ onUnmounted(() => {
   flex-shrink: 0;
   color: var(--color-text-dim);
 }
-.preview-stock.empty { color: #ff6b6b; }
+.preview-stock.empty { color: var(--color-danger); }
 
 /* Respond dialog */
 .respond-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.7);
+  background: var(--surface-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -772,7 +772,7 @@ onUnmounted(() => {
   color: var(--color-text-dim);
   margin: 0;
 }
-.dialog-player strong { color: #2fb896; }
+.dialog-player strong { color: var(--color-success); }
 .dialog-items-list {
   list-style: none;
   margin: 0;
@@ -780,7 +780,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  background: rgba(255,255,255,0.03);
+  background: var(--surface-ghost);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
@@ -819,16 +819,16 @@ onUnmounted(() => {
   white-space: nowrap;
   min-width: 80px;
 }
-.respond-action-btn.active { border-color: var(--color-gold-dark); color: var(--color-gold-bright); background: rgba(201,168,76,0.1); }
-.respond-action-btn.reject.active { border-color: #cc3030; color: #ff6060; background: rgba(200,48,48,0.1); }
-.respond-action-btn.discount.active { border-color: #2fb896; color: #2fb896; background: rgba(47,184,150,0.12); }
-.respond-action-btn.increase.active { border-color: #f0a500; color: #f0a500; background: rgba(240,165,0,0.12); }
+.respond-action-btn.active { border-color: var(--color-gold-dark); color: var(--color-gold-bright); background: var(--surface-gold-soft); }
+.respond-action-btn.reject.active { border-color: var(--color-danger-border); color: var(--color-danger); background: var(--color-danger-soft); }
+.respond-action-btn.discount.active { border-color: var(--color-success-border); color: var(--color-success); background: var(--color-success-soft); }
+.respond-action-btn.increase.active { border-color: var(--color-warning-border); color: var(--color-warning); background: var(--color-warning-soft); }
 
 .custom-price-row {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background: rgba(255,255,255,0.03);
+  background: var(--surface-ghost);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
@@ -870,6 +870,6 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s;
 }
-.cancel-btn:hover { border-color: #cc3030; color: #ff6060; }
+.cancel-btn:hover { border-color: var(--color-danger-border); color: var(--color-danger); }
 .dialog-footer .action-btn { flex: 2; width: auto; }
 </style>

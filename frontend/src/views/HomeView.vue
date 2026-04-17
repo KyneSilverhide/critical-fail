@@ -45,7 +45,7 @@ const router = useRouter()
 
 .skull-ornament {
   font-size: 2.5rem;
-  filter: drop-shadow(0 0 8px rgba(139, 26, 26, 0.7));
+  filter: drop-shadow(0 0 8px var(--color-danger-soft));
   animation: floatSkull 3s ease-in-out infinite;
 }
 
@@ -59,13 +59,13 @@ const router = useRouter()
   font-size: 2.8rem;
   line-height: 1.15;
   color: var(--color-parchment);
-  text-shadow: 0 0 30px rgba(201,168,76,0.4), 2px 2px 4px rgba(0,0,0,0.9);
+  text-shadow: var(--text-shadow-emphasis);
   margin: 0.5rem 0 0.3rem;
 }
 
 .title-accent {
   color: var(--color-gold-bright);
-  text-shadow: 0 0 20px rgba(240,192,64,0.6), 2px 2px 4px rgba(0,0,0,0.9);
+  text-shadow: var(--text-shadow-accent);
 }
 
 .app-subtitle {
@@ -120,23 +120,23 @@ const router = useRouter()
 
 .mj-btn {
   border-color: var(--color-gold-dark);
-  background: linear-gradient(160deg, #4a2010, #2e1008);
+  background: var(--gradient-accent-action);
 }
 
 .mj-btn:hover {
   border-color: var(--color-gold);
-  box-shadow: 0 0 20px rgba(201,168,76,0.3);
+  box-shadow: var(--shadow-soft);
   transform: translateY(-2px);
 }
 
 .player-btn {
-  border-color: #2a4a2a;
-  background: linear-gradient(160deg, #1a3020, #0e1e12);
+  border-color: var(--color-success-border);
+  background: var(--gradient-success-action);
 }
 
 .player-btn:hover {
-  border-color: #4a8a4a;
-  box-shadow: 0 0 20px rgba(74,138,74,0.3);
+  border-color: var(--color-success);
+  box-shadow: var(--shadow-soft);
   transform: translateY(-2px);
 }
 

@@ -1,32 +1,164 @@
 :root {
-  /* ── Dark leather/tome background ─────────────────────────────────── */
   --color-bg: #120d04;
   --color-bg2: #1a1207;
-  /* ── Warm parchment text ───────────────────────────────────────────── */
   --color-parchment: #f0e6c8;
   --color-parchment-dark: #c9b890;
-  /* ── Real gold accents (D&D rulebook style) ────────────────────────── */
   --color-gold: #c9a84c;
   --color-gold-bright: #f0c040;
   --color-gold-dark: #b89030;
-  /* ── Crimson / danger ──────────────────────────────────────────────── */
   --color-red: #9b1b1b;
   --color-red-bright: #cc3030;
   --color-crimson: #7a1010;
-  /* ── Body text ─────────────────────────────────────────────────────── */
   --color-text: #e8dfc0;
   --color-text-dim: #9a8766;
-  /* ── Borders: dark warm gold-brown ────────────────────────────────── */
   --color-border: #3a2c10;
   --color-shadow: rgba(0, 0, 0, 0.7);
-  /* ── Surface (panel / card) colors ────────────────────────────────── */
   --color-surface: #1e1508;
   --color-surface-alt: #170f04;
   --color-surface-soft: #251c0c;
-  /* ── D&D-inspired fonts (loaded via Google Fonts in index.html) ─────── */
-  --font-title: 'Cinzel Decorative', 'Cinzel', Georgia, serif;
-  --font-heading: 'Cinzel', Georgia, serif;
-  --font-body: 'IM Fell English', Georgia, 'Times New Roman', serif;
+  --color-success: #2fb896;
+  --color-success-soft: rgba(47, 184, 150, 0.12);
+  --color-success-border: rgba(47, 184, 150, 0.4);
+  --color-warning: #f0a500;
+  --color-warning-soft: rgba(240, 165, 0, 0.12);
+  --color-warning-border: rgba(240, 165, 0, 0.35);
+  --color-info: #6aa6e0;
+  --color-info-bright: #9ed3ff;
+  --color-info-soft: rgba(106, 166, 224, 0.14);
+  --color-info-border: rgba(106, 166, 224, 0.42);
+  --color-danger: #ff6b6b;
+  --color-danger-soft: rgba(224, 48, 48, 0.14);
+  --color-danger-border: rgba(224, 48, 48, 0.4);
+  --surface-raised: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --surface-track: rgba(255, 255, 255, 0.08);
+  --surface-ghost: rgba(255, 255, 255, 0.03);
+  --surface-highlight: rgba(255, 255, 255, 0.07);
+  --surface-gold-soft: rgba(201, 168, 76, 0.1);
+  --surface-gold-soft-strong: rgba(201, 168, 76, 0.16);
+  --surface-danger-soft: rgba(139, 42, 42, 0.15);
+  --surface-info-soft: rgba(106, 166, 224, 0.14);
+  --surface-overlay: rgba(0, 0, 0, 0.76);
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-medium: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-strong: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --gradient-page: radial-gradient(ellipse at 50% 0%, #1f1608 0%, #120d04 60%);
+  --gradient-panel: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
+  --gradient-panel-soft: linear-gradient(160deg, var(--color-surface-soft), var(--color-surface));
+  --gradient-accent-action: linear-gradient(160deg, #4a2010, #2e1008);
+  --gradient-accent-action-hover: linear-gradient(160deg, #6b3020, #4a1e10);
+  --gradient-info-action: linear-gradient(160deg, #2a3a4a, #1a2a3a);
+  --gradient-info-action-hover: linear-gradient(160deg, #3a4a5a, #2a3a4a);
+  --gradient-success-action: linear-gradient(160deg, #1a4a2a, #0e2e1a);
+  --gradient-success-action-hover: linear-gradient(160deg, #2a6a3a, #1a4a2a);
+  --gradient-danger-action: linear-gradient(160deg, #4a1010, #2e0808);
+  --gradient-danger-action-hover: linear-gradient(160deg, #6b1010, #4a0a0a);
+  --text-shadow-emphasis: 0 0 24px rgba(201, 168, 76, 0.28), 0 2px 4px rgba(0, 0, 0, 0.75);
+  --text-shadow-accent: 0 0 18px rgba(240, 192, 64, 0.4), 0 2px 4px rgba(0, 0, 0, 0.75);
+  --combat-melee-accent: #c41e3a;
+  --combat-melee-accent-light: #ff6b6b;
+  --combat-melee-glow: rgba(196, 30, 58, 0.4);
+  --combat-distance-accent: #1b8b6f;
+  --combat-distance-accent-light: #2fb896;
+  --combat-distance-glow: rgba(27, 139, 111, 0.4);
+  --combat-magique-accent: #7b2cbf;
+  --combat-magique-accent-light: #b391ff;
+  --combat-magique-glow: rgba(123, 44, 191, 0.4);
+  --school-abjuration: #89c4ff;
+  --school-divination: #c4a0ff;
+  --school-enchantement: #ff9eb5;
+  --school-evocation: #ffb347;
+  --school-illusion: #b0e0e6;
+  --school-invocation: #98ff98;
+  --school-necromancie: #cc99ff;
+  --school-transmutation: #f0e68c;
+  --school-default: var(--color-gold);
+  /*--font-title: 'Cinzel Decorative', 'Cinzel', Georgia, serif;*/
+  /*--font-heading: 'Cinzel', Georgia, serif;*/
+  /*--font-body: 'IM Fell English', Georgia, 'Times New Roman', serif;*/
+
+  --font-ui: "Segoe UI", "Inter", "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-heading: var(--font-ui);
+  --font-body: var(--font-ui);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --color-bg: #f5f1e8;
+  --color-bg2: #ece4d5;
+  --color-parchment: #2f261a;
+  --color-parchment-dark: #5f503d;
+  --color-gold: #9b7a35;
+  --color-gold-bright: #b8892f;
+  --color-gold-dark: #806126;
+  --color-red: #a54a42;
+  --color-red-bright: #bf5d55;
+  --color-crimson: #8d3d37;
+  --color-text: #31281d;
+  --color-text-dim: #665847;
+  --color-border: #cdbfa9;
+  --color-shadow: rgba(65, 49, 24, 0.16);
+  --color-surface: #fffdf9;
+  --color-surface-alt: #f6efe3;
+  --color-surface-soft: #efe6d6;
+  --color-success: #2f8a68;
+  --color-success-soft: rgba(47, 138, 104, 0.12);
+  --color-success-border: rgba(47, 138, 104, 0.28);
+  --color-warning: #a96d12;
+  --color-warning-soft: rgba(169, 109, 18, 0.11);
+  --color-warning-border: rgba(169, 109, 18, 0.25);
+  --color-info: #4f7fc2;
+  --color-info-bright: #3d69a6;
+  --color-info-soft: rgba(79, 127, 194, 0.12);
+  --color-info-border: rgba(79, 127, 194, 0.25);
+  --color-danger: #b24a43;
+  --color-danger-soft: rgba(178, 74, 67, 0.11);
+  --color-danger-border: rgba(178, 74, 67, 0.25);
+  --surface-raised: rgba(105, 79, 36, 0.06);
+  --surface-hover: rgba(105, 79, 36, 0.1);
+  --surface-track: rgba(70, 52, 24, 0.08);
+  --surface-ghost: rgba(70, 52, 24, 0.04);
+  --surface-highlight: rgba(255, 255, 255, 0.72);
+  --surface-gold-soft: rgba(155, 122, 53, 0.11);
+  --surface-gold-soft-strong: rgba(155, 122, 53, 0.17);
+  --surface-danger-soft: rgba(178, 74, 67, 0.12);
+  --surface-info-soft: rgba(79, 127, 194, 0.12);
+  --surface-overlay: rgba(51, 39, 23, 0.44);
+  --shadow-soft: 0 4px 16px rgba(65, 49, 24, 0.12);
+  --shadow-medium: 0 10px 28px rgba(65, 49, 24, 0.16);
+  --shadow-strong: 0 16px 40px rgba(65, 49, 24, 0.18);
+  --gradient-page: radial-gradient(ellipse at 50% 0%, #faf5ea 0%, #f5f1e8 68%);
+  --gradient-panel: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
+  --gradient-panel-soft: linear-gradient(160deg, var(--color-surface-alt), var(--color-surface-soft));
+  --gradient-accent-action: linear-gradient(160deg, #d5c1a2, #cdb48e);
+  --gradient-accent-action-hover: linear-gradient(160deg, #dbcab0, #cfb891);
+  --gradient-info-action: linear-gradient(160deg, #d7e4f8, #c6d9f1);
+  --gradient-info-action-hover: linear-gradient(160deg, #dfe9f9, #cfe0f4);
+  --gradient-success-action: linear-gradient(160deg, #d9efe5, #c8e4d8);
+  --gradient-success-action-hover: linear-gradient(160deg, #e1f3eb, #d2eadf);
+  --gradient-danger-action: linear-gradient(160deg, #f4dfdc, #eccfcb);
+  --gradient-danger-action-hover: linear-gradient(160deg, #f7e7e4, #eed7d3);
+  --text-shadow-emphasis: 0 0 20px rgba(184, 137, 47, 0.14), 0 1px 0 rgba(255, 255, 255, 0.72);
+  --text-shadow-accent: 0 0 14px rgba(184, 137, 47, 0.18), 0 1px 0 rgba(255, 255, 255, 0.72);
+  --combat-melee-accent: #a5464e;
+  --combat-melee-accent-light: #b24a43;
+  --combat-melee-glow: rgba(178, 74, 67, 0.2);
+  --combat-distance-accent: #2f8a68;
+  --combat-distance-accent-light: #2f8a68;
+  --combat-distance-glow: rgba(47, 138, 104, 0.18);
+  --combat-magique-accent: #5f58a7;
+  --combat-magique-accent-light: #5f58a7;
+  --combat-magique-glow: rgba(95, 88, 167, 0.2);
+  --school-abjuration: #567ca8;
+  --school-divination: #7565a2;
+  --school-enchantement: #af6376;
+  --school-evocation: #b17b3f;
+  --school-illusion: #5b8d99;
+  --school-invocation: #4f8e56;
+  --school-necromancie: #7d68a8;
+  --school-transmutation: #9e8f49;
+  --school-default: var(--color-gold-dark);
+  color-scheme: light;
 }
 
 * {
@@ -43,10 +175,15 @@ html, body {
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
-  font-family: var(--font-body);
+  font-family: var(--font-body), serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   min-height: 100vh;
-  background-image:
-    radial-gradient(ellipse at 50% 0%, #1f1608 0%, #120d04 60%);
+  background-image: var(--gradient-page);
+  transition: background-color 0.2s ease, color 0.2s ease, background-image 0.2s ease;
 }
 
 #app {
@@ -57,6 +194,7 @@ body {
   display: flex;
   flex-direction: column;
   padding: 0 0 2rem 0;
+  color: inherit;
 }
 
 button,
@@ -83,9 +221,9 @@ button:hover:not(:disabled),
 .merchant-item,
 .spell-card,
 .message-card {
-  background: var(--color-surface) !important;
+  background: var(--gradient-panel) !important;
   border-color: var(--color-border) !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-soft);
   animation: fadeUp 0.28s ease both;
 }
 
@@ -95,7 +233,7 @@ button:hover:not(:disabled),
 .search-input,
 .recipient-select,
 .custom-price-input {
-  background: var(--color-surface-alt) !important;
+  background: var(--surface-raised) !important;
   color: var(--color-text) !important;
   border-color: var(--color-border) !important;
 }

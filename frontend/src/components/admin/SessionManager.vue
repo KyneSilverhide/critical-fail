@@ -237,7 +237,7 @@ onMounted(loadSessions)
 
 .create-btn {
   padding: 0.65rem 1.25rem;
-  background: linear-gradient(160deg, #4a2010, #2e1008);
+  background: var(--gradient-accent-action);
   border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   color: var(--color-gold-bright);
@@ -250,13 +250,13 @@ onMounted(loadSessions)
 }
 
 .create-btn:hover:not(:disabled) {
-  background: linear-gradient(160deg, #6b3020, #4a1e10);
+  background: var(--gradient-accent-action-hover);
 }
 
 .create-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .form-error {
-  color: #ff6b6b;
+  color: var(--admin-danger-text, var(--color-danger));
   font-size: 0.85rem;
   margin-top: 0.25rem;
 }
@@ -301,7 +301,7 @@ onMounted(loadSessions)
   font-family: var(--font-title);
   font-size: 2.5rem;
   color: var(--color-gold-bright);
-  text-shadow: 0 0 20px rgba(240,192,64,0.4);
+  text-shadow: var(--text-shadow-accent);
   letter-spacing: 0.2em;
   text-align: center;
   padding: 0.5rem 0;
@@ -324,14 +324,14 @@ onMounted(loadSessions)
 }
 
 .session-status.active {
-  color: #2fb896;
-  background: rgba(47,184,150,0.1);
-  border: 1px solid #2fb896;
+  color: var(--admin-success-text, var(--color-success));
+  background: var(--admin-success-bg, var(--color-success-soft));
+  border: 1px solid var(--admin-success-border, var(--color-success-border));
 }
 
 .session-status.closed {
   color: var(--color-text-dim);
-  background: rgba(90,70,50,0.1);
+  background: var(--admin-control-bg-muted, var(--surface-ghost));
   border: 1px solid var(--color-border);
 }
 
@@ -375,9 +375,9 @@ onMounted(loadSessions)
   margin-top: 0.75rem;
   padding: 0.6rem;
   background: none;
-  border: 1px solid #8b2a2a;
+  border: 1px solid var(--admin-danger-border, var(--color-danger-border));
   border-radius: 6px;
-  color: #ff6b6b;
+  color: var(--admin-danger-text, var(--color-danger));
   font-family: var(--font-heading);
   font-size: 0.7rem;
   letter-spacing: 0.1em;
@@ -387,13 +387,13 @@ onMounted(loadSessions)
 }
 
 .close-btn:hover {
-  background: rgba(139,42,42,0.15);
+  background: var(--admin-danger-bg, var(--color-danger-soft));
 }
 
 .tv-section {
   margin-top: 0.75rem;
-  background: linear-gradient(160deg, #1a1808, #0e0c04);
-  border: 1px solid rgba(201,168,76,0.25);
+  background: var(--admin-panel-highlight-bg, var(--gradient-panel-soft));
+  border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   padding: 0.75rem;
   display: flex;
@@ -420,12 +420,12 @@ onMounted(loadSessions)
   font-size: 0.65rem;
   color: var(--color-gold);
   text-decoration: none;
-  border: 1px solid rgba(201,168,76,0.35);
+  border: 1px solid var(--color-gold-dark);
   padding: 0.15rem 0.5rem;
   border-radius: 20px;
   transition: all 0.2s;
 }
-.tv-open-btn:hover { background: rgba(201,168,76,0.1); color: var(--color-gold-bright); }
+.tv-open-btn:hover { background: var(--admin-gold-bg, var(--surface-gold-soft)); color: var(--color-gold-bright); }
 
 .tv-url-row {
   display: flex;
@@ -443,8 +443,8 @@ onMounted(loadSessions)
 
 .tv-copy-btn {
   padding: 0.2rem 0.55rem;
-  background: rgba(201,168,76,0.08);
-  border: 1px solid rgba(201,168,76,0.25);
+  background: var(--admin-gold-bg, var(--surface-gold-soft));
+  border: 1px solid var(--color-gold-dark);
   border-radius: 6px;
   color: var(--color-gold);
   font-family: var(--font-heading);
@@ -454,7 +454,7 @@ onMounted(loadSessions)
   white-space: nowrap;
   transition: all 0.2s;
 }
-.tv-copy-btn:hover { background: rgba(201,168,76,0.15); color: var(--color-gold-bright); }
+.tv-copy-btn:hover { background: var(--admin-gold-bg-strong, var(--surface-gold-soft-strong)); color: var(--color-gold-bright); }
 
 .tv-hint {
   font-family: var(--font-body);

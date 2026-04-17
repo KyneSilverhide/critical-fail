@@ -124,7 +124,7 @@ onMounted(loadImages)
   align-items: center;
   justify-content: center;
   padding: 0.5rem 1rem;
-  background: linear-gradient(160deg, #4a2010, #2e1008);
+  background: var(--gradient-accent-action);
   border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   color: var(--color-gold-bright);
@@ -135,14 +135,14 @@ onMounted(loadImages)
   transition: all 0.2s;
   width: fit-content;
 }
-.upload-btn:hover { background: linear-gradient(160deg, #6b3020, #4a1e10); }
+.upload-btn:hover { background: var(--gradient-accent-action-hover); }
 
 .file-input {
   display: none;
 }
 
 .upload-error {
-  color: #ff6b6b;
+  color: var(--color-danger);
   font-family: var(--font-body);
   font-size: 0.8rem;
 }
@@ -177,8 +177,8 @@ onMounted(loadImages)
 .show-btn {
   width: 100%;
   padding: 0.3rem 0.25rem;
-  background: rgba(201,168,76,0.08);
-  border: 1px solid rgba(201,168,76,0.3);
+  background: var(--surface-gold-soft);
+  border: 1px solid var(--color-gold-dark);
   border-radius: 6px;
   color: var(--color-gold);
   font-family: var(--font-heading);
@@ -189,5 +189,5 @@ onMounted(loadImages)
   text-align: center;
   white-space: nowrap;
 }
-.show-btn:hover { background: rgba(201,168,76,0.18); border-color: var(--color-gold-bright); color: var(--color-gold-bright); }
+.show-btn:hover { background: var(--surface-gold-soft-strong); border-color: var(--color-gold-bright); color: var(--color-gold-bright); }
 </style>

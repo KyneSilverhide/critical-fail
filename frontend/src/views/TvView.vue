@@ -2,14 +2,14 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
-import { getThemePreference, setThemePreference } from '../utils/themePreferences.js'
+import { applyTheme, getThemePreference, setThemePreference } from '../utils/themePreferences.js'
 
 const DOOM_DANGER_THRESHOLD_SECONDS = 10
 const TENSION_COLOR_MEDIUM_RATIO = 0.33
 const TENSION_COLOR_HIGH_RATIO = 0.66
 const TENSION_SHAKE_MEDIUM_RATIO = 0.4
 const TENSION_SHAKE_HARD_RATIO = 0.75
-const TEMP_HP_COLOR = '#6aa6e0'
+const TEMP_HP_COLOR = 'var(--tv-info-text)'
 
 const route = useRoute()
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
@@ -33,6 +33,7 @@ const isLightTheme = computed(() => theme.value === 'light')
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
   setThemePreference('tv', theme.value)
+  applyTheme(theme.value)
 }
 
 // Track HP change animations per player: { id -> { type: 'damage'|'heal', delta: number, key: number } }
@@ -48,9 +49,9 @@ function hpPercent(player) {
 function hpBarColor(player) {
   if (temporaryHp(player) > 0) return TEMP_HP_COLOR
   const pct = hpPercent(player)
-  if (pct > 50) return '#2fb896'
-  if (pct > 20) return '#f0a500'
-  return '#e03030'
+  if (pct > 50) return 'var(--tv-success-text)'
+  if (pct > 20) return 'var(--tv-warning-text)'
+  return 'var(--tv-danger-text)'
 }
 function temporaryHp(player) {
   return Math.max(0, (player.current_hp ?? 0) - (player.max_hp ?? 0))
@@ -135,9 +136,9 @@ const tensionProgress = computed(() => {
 
 const tensionColor = computed(() => {
   const p = tensionProgress.value
-  if (p < TENSION_COLOR_MEDIUM_RATIO) return '#2fb896'
-  if (p < TENSION_COLOR_HIGH_RATIO) return '#f0a500'
-  return '#e03030'
+  if (p < TENSION_COLOR_MEDIUM_RATIO) return 'var(--tv-success-text)'
+  if (p < TENSION_COLOR_HIGH_RATIO) return 'var(--tv-warning-text)'
+  return 'var(--tv-danger-text)'
 })
 
 const tensionShakeClass = computed(() => {
@@ -280,7 +281,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="tv-wrapper" :class="{ 'theme-light': isLightTheme }">
+  <div class="tv-wrapper">
     <button class="tv-theme-toggle" @click="toggleTheme">
       {{ isLightTheme ? '🌙 Sombre' : '☀️ Clair' }}
     </button>
@@ -505,33 +506,33 @@ onUnmounted(() => {
 .tv-wrapper {
   min-height: 100vh;
   background: var(--color-bg);
-  background-image: radial-gradient(ellipse at 50% 0%, #1f1608 0%, #120d04 60%);
+  background-image: var(--gradient-page);
   display: flex;
   flex-direction: column;
   padding: 2.5rem 3rem;
   box-sizing: border-box;
   font-size: 18px; /* Base font size boosted for TV viewing distance */
-}
-
-.tv-wrapper.theme-light {
-  --color-bg: #f3ecde;
-  --color-bg2: #ece2d0;
-  --color-parchment: #2f2416;
-  --color-parchment-dark: #6d5a40;
-  --color-gold: #9c7129;
-  --color-gold-bright: #b5822f;
-  --color-gold-dark: #8f6927;
-  --color-red: #b04141;
-  --color-red-bright: #c65252;
-  --color-crimson: #933131;
-  --color-text: #3b2e1e;
-  --color-text-dim: #6f5e47;
-  --color-border: #ccbca0;
-  --color-shadow: rgba(50, 36, 18, 0.18);
-  --color-surface: #fff8ea;
-  --color-surface-alt: #f5ecdd;
-  --color-surface-soft: #efe2cd;
-  background-image: radial-gradient(ellipse at 50% 0%, #efe6d6 0%, #f3ecde 65%);
+  color: var(--color-text);
+  --tv-panel-bg: var(--gradient-panel);
+  --tv-panel-highlight-bg: var(--gradient-panel-soft);
+  --tv-header-bg: var(--surface-highlight);
+  --tv-control-bg: var(--surface-raised);
+  --tv-control-bg-muted: var(--surface-ghost);
+  --tv-track-bg: var(--surface-track);
+  --tv-gold-bg: var(--surface-gold-soft);
+  --tv-gold-bg-strong: var(--surface-gold-soft-strong);
+  --tv-success-text: var(--color-success);
+  --tv-success-bg: var(--color-success-soft);
+  --tv-success-border: var(--color-success-border);
+  --tv-warning-text: var(--color-warning);
+  --tv-warning-bg: var(--color-warning-soft);
+  --tv-warning-border: var(--color-warning-border);
+  --tv-info-text: var(--color-info-bright);
+  --tv-info-bg: var(--color-info-soft);
+  --tv-info-border: var(--color-info-border);
+  --tv-danger-text: var(--color-danger);
+  --tv-danger-bg: var(--color-danger-soft);
+  --tv-danger-border: var(--color-danger-border);
 }
 
 .tv-theme-toggle {
@@ -539,7 +540,7 @@ onUnmounted(() => {
   top: 1rem;
   right: 1rem;
   z-index: 20;
-  background: color-mix(in oklab, var(--color-surface-alt) 85%, transparent);
+  background: var(--tv-control-bg);
   border: 1px solid var(--color-border);
   border-radius: 999px;
   padding: 0.45rem 0.85rem;
@@ -575,7 +576,7 @@ onUnmounted(() => {
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { font-family: var(--font-heading); font-size: 1rem; letter-spacing: 0.2em; color: var(--color-text-dim); }
 .error-icon { font-size: 3rem; }
-.error-text { font-family: var(--font-heading); font-size: 1.2rem; color: #ff6b6b; text-align: center; }
+.error-text { font-family: var(--font-heading); font-size: 1.2rem; color: var(--tv-danger-text); text-align: center; }
 
 /* ── Header (lobby only) ──────────────────────────────────────────────── */
 .tv-header {
@@ -586,7 +587,7 @@ onUnmounted(() => {
   font-family: var(--font-title);
   font-size: clamp(1.2rem, 3vw, 2.4rem);
   color: var(--color-gold-bright);
-  text-shadow: 0 0 40px rgba(240,192,64,0.4), 0 2px 0 rgba(0,0,0,0.8);
+  text-shadow: var(--text-shadow-accent);
   letter-spacing: 0.1em;
   margin: 0.15rem 0;
 }
@@ -617,7 +618,7 @@ onUnmounted(() => {
   font-family: var(--font-title);
   font-size: clamp(1.08rem, 2.1vw, 1.68rem);
   color: var(--color-parchment);
-  text-shadow: 0 0 20px rgba(240,192,64,0.3), 0 2px 4px rgba(0,0,0,0.8);
+  text-shadow: var(--text-shadow-emphasis);
   letter-spacing: 0.08em;
   margin: 0;
 }
@@ -628,13 +629,13 @@ onUnmounted(() => {
   border-radius: 10px;
   background: white;
   padding: 5px;
-  box-shadow: 0 0 40px rgba(201,168,76,0.2);
+  box-shadow: var(--shadow-soft);
 }
 .lobby-code {
   font-family: var(--font-title);
   font-size: clamp(2.4rem, 7.2vw, 4.8rem);
   color: var(--color-gold-bright);
-  text-shadow: 0 0 60px rgba(240,192,64,0.6), 0 4px 0 rgba(0,0,0,0.8);
+  text-shadow: var(--text-shadow-accent);
   letter-spacing: 0.2em;
   line-height: 1;
 }
@@ -671,7 +672,7 @@ onUnmounted(() => {
 /* ── Player Card ─────────────────────────────────────────────────────── */
 .player-card {
   position: relative;
-  background: linear-gradient(160deg, var(--color-surface-soft) 0%, var(--color-surface) 100%);
+  background: var(--tv-panel-highlight-bg);
   border: 1px solid var(--color-border);
   border-radius: 20px;
   padding: 2rem;
@@ -690,11 +691,11 @@ onUnmounted(() => {
   opacity: 0.4;
 }
 .player-card.is-critical {
-  border-color: #e03030;
-  box-shadow: 0 0 20px rgba(224,48,48,0.2);
+  border-color: var(--tv-danger-border);
+  box-shadow: 0 0 20px var(--tv-danger-bg);
 }
 .player-card.is-ko {
-  border-color: #555;
+  border-color: var(--color-border);
   opacity: 0.6;
   filter: grayscale(0.5);
 }
@@ -713,8 +714,8 @@ onUnmounted(() => {
   100% { transform: translateX(0); }
 }
 @keyframes damageGlow {
-  0%   { box-shadow: 0 0 30px rgba(224,48,48,0.8); border-color: #e03030; }
-  40%  { box-shadow: 0 0 20px rgba(224,48,48,0.4); }
+  0%   { box-shadow: 0 0 30px var(--tv-danger-bg); border-color: var(--tv-danger-border); }
+  40%  { box-shadow: 0 0 20px var(--tv-danger-bg); }
   100% { box-shadow: none; border-color: var(--color-border); }
 }
 
@@ -723,9 +724,9 @@ onUnmounted(() => {
   animation: healPulse 2s ease-out;
 }
 @keyframes healPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(47,184,150,0.7); border-color: #2fb896; }
-  20%  { box-shadow: 0 0 30px 6px rgba(47,184,150,0.5); }
-  60%  { box-shadow: 0 0 15px 2px rgba(47,184,150,0.2); }
+  0%   { box-shadow: 0 0 0 0 var(--tv-success-bg); border-color: var(--tv-success-border); }
+  20%  { box-shadow: 0 0 30px 6px var(--tv-success-bg); }
+  60%  { box-shadow: 0 0 15px 2px var(--tv-success-bg); }
   100% { box-shadow: none; border-color: var(--color-border); }
 }
 
@@ -744,7 +745,7 @@ onUnmounted(() => {
   overflow: hidden;
   border: 3px solid var(--color-gold-dark);
   flex-shrink: 0;
-  background: rgba(255,255,255,0.07);
+  background: var(--tv-control-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -784,8 +785,8 @@ onUnmounted(() => {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--color-gold-dark);
-  background: rgba(180,120,20,0.15);
-  border: 1px solid rgba(180,120,20,0.4);
+  background: var(--tv-gold-bg);
+  border: 1px solid var(--color-gold-dark);
   border-radius: 20px;
   padding: 0.1rem 0.45rem;
   width: fit-content;
@@ -795,9 +796,9 @@ onUnmounted(() => {
   font-family: var(--font-heading);
   font-size: 0.8rem;
   letter-spacing: 0.08em;
-  color: #9ed3ff;
-  background: rgba(100,150,220,0.14);
-  border: 1px solid rgba(100,150,220,0.45);
+  color: var(--tv-info-text);
+  background: var(--tv-info-bg);
+  border: 1px solid var(--tv-info-border);
   border-radius: 20px;
   padding: 0.2rem 0.5rem;
   white-space: nowrap;
@@ -807,8 +808,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  background: rgba(201,168,76,0.1);
-  border: 1px solid rgba(201,168,76,0.4);
+  background: var(--tv-gold-bg);
+  border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   padding: 0.3rem 0.6rem;
 }
@@ -822,7 +823,7 @@ onUnmounted(() => {
 
 .concentration-badge {
   font-size: 1.3rem;
-  filter: drop-shadow(0 0 6px rgba(123,94,167,0.8));
+  filter: drop-shadow(0 0 6px var(--tv-info-border));
 }
 
 /* HP Section */
@@ -850,13 +851,13 @@ onUnmounted(() => {
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #9ed3ff;
+  color: var(--tv-info-text);
   margin-left: 0.45rem;
 }
 
 .hp-track {
   height: 14px;
-  background: rgba(255,255,255,0.06);
+  background: var(--tv-track-bg);
   border-radius: 7px;
   overflow: hidden;
 }
@@ -881,9 +882,9 @@ onUnmounted(() => {
   font-family: var(--font-heading);
   font-size: clamp(0.75rem, 1.4vw, 1rem);
   letter-spacing: 0.05em;
-  color: #f0a500;
-  background: rgba(240,165,0,0.12);
-  border: 1px solid rgba(240,165,0,0.4);
+  color: var(--tv-warning-text);
+  background: var(--tv-warning-bg);
+  border: 1px solid var(--tv-warning-border);
   border-radius: 20px;
   padding: 0.24rem 0.7rem;
   white-space: nowrap;
@@ -899,16 +900,16 @@ onUnmounted(() => {
   font-size: clamp(2rem, 5vw, 3.5rem);
   font-weight: 900;
   pointer-events: none;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+  text-shadow: 0 2px 10px var(--color-shadow);
   z-index: 10;
 }
 .hp-delta-damage {
-  color: #ff4444;
-  text-shadow: 0 0 20px rgba(255,68,68,0.8), 0 2px 8px rgba(0,0,0,0.9);
+  color: var(--tv-danger-text);
+  text-shadow: 0 0 20px var(--tv-danger-bg), 0 2px 8px var(--color-shadow);
 }
 .hp-delta-heal {
-  color: #2fb896;
-  text-shadow: 0 0 20px rgba(47,184,150,0.8), 0 2px 8px rgba(0,0,0,0.9);
+  color: var(--tv-success-text);
+  text-shadow: 0 0 20px var(--tv-success-bg), 0 2px 8px var(--color-shadow);
 }
 
 /* Transition for HP delta float-up */
@@ -941,7 +942,7 @@ onUnmounted(() => {
   font-family: var(--font-title);
   font-size: clamp(1.5rem, 4vw, 3rem);
   color: var(--color-gold-bright);
-  text-shadow: 0 0 30px rgba(240,192,64,0.5), 0 2px 4px rgba(0,0,0,0.8);
+  text-shadow: var(--text-shadow-accent);
   text-align: center;
   margin: 0;
 }
@@ -979,7 +980,7 @@ onUnmounted(() => {
 }
 .vote-bar {
   height: 24px;
-  background: rgba(255,255,255,0.08);
+  background: var(--tv-track-bg);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
@@ -989,7 +990,7 @@ onUnmounted(() => {
   background: linear-gradient(90deg, var(--color-gold-dark), var(--color-gold-bright));
   border-radius: 12px;
   transition: width 0.8s ease;
-  box-shadow: 0 0 10px rgba(240,192,64,0.4);
+  box-shadow: var(--shadow-soft);
 }
 .voter-names {
   font-family: var(--font-body);
@@ -1010,7 +1011,7 @@ onUnmounted(() => {
   border: 3px solid var(--color-gold-dark);
   border-top-color: var(--color-gold-bright);
   animation: spin 1.5s linear infinite;
-  box-shadow: 0 0 30px rgba(240,192,64,0.3);
+  box-shadow: var(--shadow-soft);
 }
 .vote-waiting p {
   font-family: var(--font-heading);
@@ -1042,20 +1043,20 @@ onUnmounted(() => {
   line-height: 1;
   letter-spacing: 0.08em;
   color: var(--color-parchment);
-  text-shadow: 0 0 35px rgba(240,192,64,0.35), 0 4px 0 rgba(0,0,0,0.8);
+  text-shadow: var(--text-shadow-accent);
 }
 .doom-timer.danger {
-  color: #ff4d4d;
+  color: var(--tv-danger-text);
   animation: doomPulse 0.75s infinite;
 }
 @keyframes doomPulse {
-  0%, 100% { transform: scale(1); text-shadow: 0 0 20px rgba(255,77,77,0.5); }
-  50% { transform: scale(1.03); text-shadow: 0 0 45px rgba(255,77,77,0.9); }
+  0%, 100% { transform: scale(1); text-shadow: 0 0 20px var(--tv-danger-bg); }
+  50% { transform: scale(1.03); text-shadow: 0 0 45px var(--tv-danger-bg); }
 }
 
 /* ── Tension mode ─────────────────────────────────────────────────────── */
 .tension-display {
-  --tension-color: #f0a500;
+  --tension-color: var(--tv-warning-text);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1082,7 +1083,7 @@ onUnmounted(() => {
   padding: 0.55rem 0;
   font-family: var(--font-heading);
   color: var(--color-text-dim);
-  background: rgba(255,255,255,0.02);
+  background: var(--tv-control-bg-muted);
 }
 .tension-step.active {
   color: var(--color-parchment);
@@ -1180,7 +1181,7 @@ onUnmounted(() => {
   font-family: var(--font-title);
   font-size: clamp(2rem, 4vw, 3.5rem);
   color: var(--color-gold-bright);
-  text-shadow: 0 0 30px rgba(240,192,64,0.5);
+  text-shadow: var(--text-shadow-accent);
   letter-spacing: 0.08em;
   margin: 0;
 }
@@ -1244,20 +1245,20 @@ onUnmounted(() => {
   font-family: var(--font-title);
   font-size: clamp(1.4rem, 3vw, 2rem);
   color: var(--color-gold-bright);
-  text-shadow: 0 0 12px rgba(240,192,64,0.4);
+  text-shadow: var(--text-shadow-accent);
 }
 .item-stock {
   font-family: var(--font-heading);
   font-size: 0.85rem;
   letter-spacing: 0.08em;
   color: var(--color-text-dim);
-  background: rgba(255,255,255,0.06);
+  background: var(--tv-control-bg);
   border: 1px solid var(--color-border);
   border-radius: 20px;
   padding: 0.2rem 0.65rem;
 }
 .item-stock.unlimited { color: var(--color-gold-dark); border-color: var(--color-gold-dark); }
-.item-stock.empty { color: #ff6b6b; border-color: #8b2a2a; background: rgba(139,42,42,0.1); }
+.item-stock.empty { color: var(--tv-danger-text); border-color: var(--tv-danger-border); background: var(--tv-danger-bg); }
 
 /* ── Footer ──────────────────────────────────────────────────────────── */
 .tv-footer {

@@ -121,7 +121,7 @@ function resolvedText() {
 
 .dice-card {
   border-left: 3px solid var(--color-gold-dark);
-  background: linear-gradient(160deg, #3a2a10, #2a1c08);
+  background: var(--player-panel-highlight-bg, var(--gradient-panel-soft));
 }
 
 .dice-header {
@@ -168,7 +168,7 @@ function resolvedText() {
   font-family: var(--font-title);
   font-size: 2rem;
   color: var(--color-gold-bright);
-  text-shadow: 0 0 20px rgba(240,192,64,0.5);
+  text-shadow: var(--text-shadow-accent);
   line-height: 1;
 }
 
@@ -208,36 +208,36 @@ function resolvedText() {
   font-size: 1.1rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: #f5e080;
-  text-shadow: 0 0 18px rgba(240,224,80,0.7), 0 2px 4px rgba(0,0,0,0.8);
+  color: var(--color-gold-bright);
+  text-shadow: var(--text-shadow-accent);
 }
 .voice-god {
-  border-left: 3px solid #f5e080;
-  background: linear-gradient(160deg, #3a2e08, #201a04);
+  border-left: 3px solid var(--color-gold-dark);
+  background: var(--gradient-panel-soft);
 }
 
 .voice-whisper .message-text {
   font-style: italic;
   font-size: 0.85rem;
-  color: #a0c4ff;
+  color: var(--color-info-bright);
   opacity: 0.8;
   letter-spacing: 0.06em;
 }
 .voice-whisper {
-  border-left: 3px solid #a0c4ff;
-  background: linear-gradient(160deg, #0e1a2a, #080f1a);
+  border-left: 3px solid var(--color-info-border);
+  background: var(--gradient-panel-soft);
 }
 
 .voice-demon .message-text {
   font-family: var(--font-heading);
   font-size: 1rem;
-  color: #ff4444;
-  text-shadow: 0 0 12px rgba(255,68,68,0.7), 0 2px 4px rgba(0,0,0,0.8);
+  color: var(--color-danger);
+  text-shadow: 0 0 12px var(--color-danger-soft), 0 2px 4px var(--color-shadow);
   letter-spacing: 0.08em;
 }
 .voice-demon {
-  border-left: 3px solid #cc2020;
-  background: linear-gradient(160deg, #2a0808, #1a0404);
+  border-left: 3px solid var(--color-danger-border);
+  background: var(--gradient-panel-soft);
 }
 
 /* ── Text effects ───────────────────────────────────────────── */

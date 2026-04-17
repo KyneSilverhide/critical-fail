@@ -14,7 +14,7 @@ import VoteManager from '../components/admin/VoteManager.vue'
 import ImageManager from '../components/admin/ImageManager.vue'
 import MerchantManager from '../components/admin/MerchantManager.vue'
 import SearchTool from '../components/admin/SearchTool.vue'
-import { getThemePreference, setThemePreference } from '../utils/themePreferences.js'
+import { applyTheme, getThemePreference, setThemePreference } from '../utils/themePreferences.js'
 
 const router = useRouter()
 const activeTab = ref('sessions')
@@ -42,6 +42,7 @@ function logout() {
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
   setThemePreference('admin', theme.value)
+  applyTheme(theme.value)
 }
 
 onMounted(() => {
@@ -108,7 +109,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="admin-wrapper" :class="{ 'theme-light': isLightTheme }">
+  <div class="admin-wrapper">
     <header class="admin-header">
       <div class="header-top">
         <h1 class="page-title">🎲 Tableau de Bord <span class="title-accent">MJ</span></h1>
@@ -180,31 +181,31 @@ onUnmounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
-}
-
-.admin-wrapper.theme-light {
-  --color-bg: #f3ecde;
-  --color-bg2: #ece2d0;
-  --color-parchment: #2f2416;
-  --color-parchment-dark: #6d5a40;
-  --color-gold: #9c7129;
-  --color-gold-bright: #b5822f;
-  --color-gold-dark: #8f6927;
-  --color-red: #b04141;
-  --color-red-bright: #c65252;
-  --color-crimson: #933131;
-  --color-text: #3b2e1e;
-  --color-text-dim: #6f5e47;
-  --color-border: #ccbca0;
-  --color-shadow: rgba(50, 36, 18, 0.18);
-  --color-surface: #fff8ea;
-  --color-surface-alt: #f5ecdd;
-  --color-surface-soft: #efe2cd;
+  color: var(--color-text);
+  --admin-panel-bg: var(--gradient-panel);
+  --admin-panel-highlight-bg: var(--gradient-panel-soft);
+  --admin-header-bg: var(--surface-highlight);
+  --admin-control-bg: var(--surface-raised);
+  --admin-control-bg-muted: var(--surface-ghost);
+  --admin-gold-bg: var(--surface-gold-soft);
+  --admin-gold-bg-strong: var(--surface-gold-soft-strong);
+  --admin-success-bg: var(--color-success-soft);
+  --admin-success-border: var(--color-success-border);
+  --admin-success-text: var(--color-success);
+  --admin-warning-bg: var(--color-warning-soft);
+  --admin-warning-border: var(--color-warning-border);
+  --admin-warning-text: var(--color-warning);
+  --admin-info-bg: var(--color-info-soft);
+  --admin-info-border: var(--color-info-border);
+  --admin-info-text: var(--color-info-bright);
+  --admin-danger-bg: var(--color-danger-soft);
+  --admin-danger-border: var(--color-danger-border);
+  --admin-danger-text: var(--color-danger);
 }
 
 .admin-header {
   padding: 1.5rem 1.5rem 0;
-  background: linear-gradient(180deg, var(--color-surface-alt) 0%, transparent 100%);
+  background: linear-gradient(180deg, var(--admin-header-bg) 0%, transparent 100%);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -271,8 +272,8 @@ onUnmounted(() => {
 }
 
 .logout-btn:hover {
-  border-color: var(--color-red);
-  color: #ff6b6b;
+  border-color: var(--admin-danger-border);
+  color: var(--admin-danger-text);
 }
 
 .admin-nav {

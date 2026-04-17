@@ -84,10 +84,6 @@ const tensionAdvanceLabel = computed(() => {
   return direction === 'descending' ? '-1' : '+1'
 })
 
-function handleModeChanged({ mode }) {
-  tvMode.value = mode
-}
-
 function handleAdminState(data) {
   if (sessionStore.activeSession?.id !== data.sessionId) return
   tvMode.value = data.tvMode || 'lobby'
@@ -125,7 +121,6 @@ function handleTvControlError({ message }) {
 onMounted(() => {
   clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 1000)
   const socket = getSocket()
-  socket.on('tv-mode-changed', handleModeChanged)
   socket.on('admin-state', handleAdminState)
   socket.on('doom-clock-started', handleDoomClockStarted)
   socket.on('doom-clock-stopped', handleDoomClockStopped)
@@ -137,7 +132,6 @@ onMounted(() => {
 onUnmounted(() => {
   if (clockTickInterval) window.clearInterval(clockTickInterval)
   const socket = getSocket()
-  socket.off('tv-mode-changed', handleModeChanged)
   socket.off('admin-state', handleAdminState)
   socket.off('doom-clock-started', handleDoomClockStarted)
   socket.off('doom-clock-stopped', handleDoomClockStopped)
@@ -149,20 +143,6 @@ onUnmounted(() => {
 
 <template>
   <div class="tv-controls">
-    <section class="control-section">
-      <h2 class="section-title">📺 Mode TV</h2>
-      <div class="mode-indicator">
-        Mode actuel :
-        <span class="mode-badge">{{ tvMode }}</span>
-      </div>
-      <div class="mode-buttons">
-        <button class="action-btn" :class="{ active: tvMode === 'lobby' }" @click="setMode('lobby')">🔗 Lobby</button>
-        <button class="action-btn" :class="{ active: tvMode === 'combat' }" @click="setMode('combat')">⚔️ Combat</button>
-        <button class="action-btn" :class="{ active: tvMode === 'doom' }" @click="setMode('doom')">⏱️ Doom</button>
-        <button class="action-btn" :class="{ active: tvMode === 'tension' }" @click="setMode('tension')">📈 Tension</button>
-      </div>
-    </section>
-
     <section class="control-section">
       <h2 class="section-title">⏱️ Doom Clock</h2>
       <div class="form-row">
@@ -212,7 +192,7 @@ onUnmounted(() => {
 <style scoped>
 .tv-controls { display: flex; flex-direction: column; gap: 1rem; }
 .control-section {
-  background: linear-gradient(160deg, var(--color-surface), var(--color-surface-alt));
+  background: var(--admin-panel-bg, var(--gradient-panel));
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 1rem;
@@ -241,7 +221,7 @@ onUnmounted(() => {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--color-gold-bright);
-  background: rgba(240,192,64,0.1);
+  background: var(--admin-gold-bg, var(--surface-gold-soft));
   border: 1px solid var(--color-gold-dark);
   border-radius: 20px;
   padding: 0.15rem 0.5rem;
@@ -252,7 +232,7 @@ onUnmounted(() => {
 .form-input {
   width: 100%;
   box-sizing: border-box;
-  background: var(--color-surface);
+  background: var(--admin-control-bg, var(--surface-raised));
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.5rem 0.65rem;
@@ -270,7 +250,7 @@ onUnmounted(() => {
 }
 .action-btn {
   padding: 0.45rem 0.85rem;
-  background: linear-gradient(160deg, #4a2010, #2e1008);
+  background: var(--gradient-accent-action);
   border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   color: var(--color-gold-bright);
@@ -279,13 +259,13 @@ onUnmounted(() => {
   letter-spacing: 0.08em;
   cursor: pointer;
 }
-.action-btn:hover:not(:disabled) { background: linear-gradient(160deg, #6b3020, #4a1e10); }
+.action-btn:hover:not(:disabled) { background: var(--gradient-accent-action-hover); }
 .action-btn.active {
-  background: linear-gradient(160deg, #6b3020, #4a1e10);
+  background: var(--gradient-accent-action-hover);
   border-color: var(--color-gold-bright);
 }
 .action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.danger-btn { border-color: #8b2a2a; color: #ff6b6b; background: linear-gradient(160deg, #4a1010, #2e0808); }
+.danger-btn { border-color: var(--admin-danger-border, var(--color-danger-border)); color: var(--admin-danger-text, var(--color-danger)); background: var(--gradient-danger-action); }
 .status-line {
   margin: 0;
   font-family: var(--font-heading);
@@ -297,6 +277,6 @@ onUnmounted(() => {
   margin: 0;
   font-family: var(--font-body);
   font-size: 0.75rem;
-  color: #ff6b6b;
+  color: var(--admin-danger-text, var(--color-danger));
 }
 </style>

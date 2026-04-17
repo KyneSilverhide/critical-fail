@@ -361,7 +361,7 @@ async function joinSession() {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-raised);
   border: 2px dashed var(--color-border);
   display: flex;
   align-items: center;
@@ -373,7 +373,7 @@ async function joinSession() {
   display: inline-flex;
   align-items: center;
   padding: 0.5rem 1rem;
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-raised);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   color: var(--color-text-dim);
@@ -388,7 +388,7 @@ async function joinSession() {
 .avatar-input-hidden { display: none; }
 
 .form-error {
-  color: #ff6b6b;
+  color: var(--color-danger);
   font-family: var(--font-body);
   font-size: 0.9rem;
   text-align: center;
@@ -396,8 +396,8 @@ async function joinSession() {
 
 .submit-btn {
   padding: 1rem;
-  background: linear-gradient(160deg, #1a4a2a, #0e2e1a);
-  border: 1px solid #2a6a3a;
+  background: var(--gradient-success-action);
+  border: 1px solid var(--color-success-border);
   border-radius: 8px;
   color: var(--color-parchment);
   font-family: var(--font-heading);
@@ -409,8 +409,8 @@ async function joinSession() {
   margin-top: 0.5rem;
 }
 .submit-btn:hover:not(:disabled) {
-  background: linear-gradient(160deg, #2a6a3a, #1a4a2a);
-  box-shadow: 0 4px 20px rgba(42,106,58,0.4);
+  background: var(--gradient-success-action-hover);
+  box-shadow: var(--shadow-soft);
 }
 .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>

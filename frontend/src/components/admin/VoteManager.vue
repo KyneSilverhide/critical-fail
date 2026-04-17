@@ -215,16 +215,16 @@ onUnmounted(() => {
 
 .remove-option-btn {
   background: none;
-  border: 1px solid #8b2a2a;
+  border: 1px solid var(--admin-danger-border, var(--color-danger-border));
   border-radius: 4px;
-  color: #ff6b6b;
+  color: var(--admin-danger-text, var(--color-danger));
   padding: 0.3rem 0.5rem;
   cursor: pointer;
   font-size: 0.7rem;
   flex-shrink: 0;
   transition: all 0.2s;
 }
-.remove-option-btn:hover { background: rgba(139,42,42,0.2); }
+.remove-option-btn:hover { background: var(--admin-danger-bg, var(--color-danger-soft)); }
 
 .add-option-btn {
   background: none;
@@ -253,7 +253,7 @@ onUnmounted(() => {
 
 .action-btn {
   padding: 0.5rem 1rem;
-  background: linear-gradient(160deg, #4a2010, #2e1008);
+  background: var(--gradient-accent-action);
   border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   color: var(--color-gold-bright);
@@ -263,15 +263,15 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s;
 }
-.action-btn:hover:not(:disabled) { background: linear-gradient(160deg, #6b3020, #4a1e10); }
+.action-btn:hover:not(:disabled) { background: var(--gradient-accent-action-hover); }
 .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .danger-btn {
-  background: linear-gradient(160deg, #4a1010, #2e0808);
-  border-color: #8b2a2a;
-  color: #ff6b6b;
+  background: var(--gradient-danger-action);
+  border-color: var(--admin-danger-border, var(--color-danger-border));
+  color: var(--admin-danger-text, var(--color-danger));
 }
-.danger-btn:hover:not(:disabled) { background: linear-gradient(160deg, #6b1010, #4a0a0a); }
+.danger-btn:hover:not(:disabled) { background: var(--gradient-danger-action-hover); }
 
 /* Active vote display */
 .active-vote {
@@ -303,13 +303,13 @@ onUnmounted(() => {
   border-radius: 20px;
 }
 .vote-badge.active {
-  color: #2fb896;
-  background: rgba(47,184,150,0.1);
-  border: 1px solid #2fb896;
+  color: var(--admin-success-text, var(--color-success));
+  background: var(--admin-success-bg, var(--color-success-soft));
+  border: 1px solid var(--admin-success-border, var(--color-success-border));
 }
 .vote-badge.closed {
   color: var(--color-text-dim);
-  background: rgba(90,70,50,0.1);
+  background: var(--admin-control-bg-muted, var(--surface-ghost));
   border: 1px solid var(--color-border);
 }
 
@@ -352,7 +352,7 @@ onUnmounted(() => {
 
 .result-bar-track {
   height: 8px;
-  background: rgba(255,255,255,0.06);
+  background: var(--surface-track);
   border-radius: 4px;
   overflow: hidden;
 }

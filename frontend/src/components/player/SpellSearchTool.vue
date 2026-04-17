@@ -143,7 +143,7 @@ onUnmounted(() => {
 .search-bar { display: flex; gap: 0.45rem; }
 .search-input {
   flex: 1;
-  background: rgba(255,255,255,0.05);
+  background: var(--player-control-bg, var(--surface-raised));
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 0.55rem 0.75rem;
@@ -155,7 +155,7 @@ onUnmounted(() => {
   border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   padding: 0.55rem 0.75rem;
-  background: rgba(180,120,20,0.14);
+  background: var(--player-gold-bg, var(--surface-gold-soft));
   color: var(--color-gold-bright);
   font-family: var(--font-heading);
   cursor: pointer;
@@ -167,7 +167,7 @@ onUnmounted(() => {
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 0.75rem;
-  background: rgba(255,255,255,0.03);
+  background: var(--player-control-bg-muted, var(--surface-ghost));
 }
 .spell-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
 .spell-name { margin: 0; font-size: 0.95rem; font-family: var(--font-heading); color: var(--color-parchment); }

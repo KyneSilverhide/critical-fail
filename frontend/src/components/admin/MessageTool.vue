@@ -277,38 +277,38 @@ async function sendMessage() {
 .toggle-btn.active {
   border-color: var(--color-gold-dark);
   color: var(--color-gold-bright);
-  background: rgba(201,168,76,0.08);
+  background: var(--admin-gold-bg, var(--surface-gold-soft));
 }
 
 .toggle-btn.voice-god.active {
-  border-color: #f0e080;
-  color: #f0e080;
-  background: rgba(240,224,128,0.1);
+  border-color: var(--color-gold-dark);
+  color: var(--color-gold-bright);
+  background: var(--admin-gold-bg, var(--surface-gold-soft));
 }
 .toggle-btn.voice-whisper.active {
-  border-color: #a0c4ff;
-  color: #a0c4ff;
-  background: rgba(160,196,255,0.08);
+  border-color: var(--admin-info-border, var(--color-info-border));
+  color: var(--admin-info-text, var(--color-info-bright));
+  background: var(--admin-info-bg, var(--color-info-soft));
 }
 .toggle-btn.voice-demon.active {
-  border-color: #cc3030;
-  color: #ff6060;
-  background: rgba(200,48,48,0.12);
+  border-color: var(--admin-danger-border, var(--color-danger-border));
+  color: var(--admin-danger-text, var(--color-danger));
+  background: var(--admin-danger-bg, var(--color-danger-soft));
 }
 
 .feedback {
   font-family: var(--font-body);
   font-size: 0.9rem;
-  color: #2fb896;
+  color: var(--admin-success-text, var(--color-success));
   text-align: center;
 }
 
-.feedback.error { color: #ff6b6b; }
+.feedback.error { color: var(--admin-danger-text, var(--color-danger)); }
 
 .send-btn {
   padding: 0.85rem;
-  background: linear-gradient(160deg, #2a3a4a, #1a2a3a);
-  border: 1px solid #3a5a7a;
+  background: var(--gradient-info-action);
+  border: 1px solid var(--admin-info-border, var(--color-info-border));
   border-radius: 8px;
   color: var(--color-parchment);
   font-family: var(--font-heading);
@@ -320,8 +320,8 @@ async function sendMessage() {
 }
 
 .send-btn:hover:not(:disabled) {
-  background: linear-gradient(160deg, #3a4a5a, #2a3a4a);
-  box-shadow: 0 4px 20px rgba(58,90,122,0.4);
+  background: var(--gradient-info-action-hover);
+  box-shadow: var(--shadow-soft);
 }
 
 .send-btn:disabled { opacity: 0.6; cursor: not-allowed; }

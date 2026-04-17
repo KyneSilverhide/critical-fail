@@ -9,9 +9,9 @@ function hpPercent(player) {
 }
 function hpColor(player) {
   const pct = hpPercent(player)
-  if (pct > 50) return '#2fb896'
-  if (pct > 20) return '#f0a500'
-  return '#e03030'
+  if (pct > 50) return 'var(--admin-success-text, var(--color-success))'
+  if (pct > 20) return 'var(--admin-warning-text, var(--color-warning))'
+  return 'var(--admin-danger-text, var(--color-danger))'
 }
 
 const CONDITION_LABELS = {
@@ -101,7 +101,7 @@ function kickPlayer(player) {
 
 .player-item {
   padding: 0.6rem 0.75rem;
-  background: linear-gradient(160deg, #1e1e10, #141408);
+  background: var(--admin-panel-highlight-bg, var(--gradient-panel-soft));
   border: 1px solid var(--color-border);
   border-radius: 8px;
   display: flex;
@@ -114,12 +114,12 @@ function kickPlayer(player) {
 
 .ac-badge {
   font-family: var(--font-heading); font-size: 0.65rem; letter-spacing: 0.05em;
-  color: var(--color-gold-bright); background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.35);
+  color: var(--color-gold-bright); background: var(--admin-gold-bg, var(--surface-gold-soft)); border: 1px solid var(--color-gold-dark);
   border-radius: 20px; padding: 0.1rem 0.45rem;
 }
 .initiative-badge {
   font-family: var(--font-heading); font-size: 0.65rem; letter-spacing: 0.05em;
-  color: #9ed3ff; background: rgba(100,150,220,0.12); border: 1px solid rgba(100,150,220,0.45);
+  color: var(--admin-info-text, var(--color-info-bright)); background: var(--admin-info-bg, var(--color-info-soft)); border: 1px solid var(--admin-info-border, var(--color-info-border));
   border-radius: 20px; padding: 0.1rem 0.45rem;
 }
 .hp-text {
@@ -130,11 +130,11 @@ function kickPlayer(player) {
 
 .player-badge {
   font-family: var(--font-heading); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase;
-  color: #2fb896; background: rgba(47,184,150,0.1); border: 1px solid #2fb896;
+  color: var(--admin-success-text, var(--color-success)); background: var(--admin-success-bg, var(--color-success-soft)); border: 1px solid var(--admin-success-border, var(--color-success-border));
   padding: 0.15rem 0.4rem; border-radius: 20px;
 }
 
-.hp-bar-track { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+.hp-bar-track { height: 4px; background: var(--surface-track); border-radius: 2px; overflow: hidden; }
 .hp-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease, background 0.5s ease; }
 
 .conditions-row {
@@ -151,9 +151,9 @@ function kickPlayer(player) {
   font-family: var(--font-heading);
   font-size: 0.6rem;
   letter-spacing: 0.05em;
-  color: #f0a500;
-  background: rgba(240,165,0,0.12);
-  border: 1px solid rgba(240,165,0,0.4);
+  color: var(--admin-warning-text, var(--color-warning));
+  background: var(--admin-warning-bg, var(--color-warning-soft));
+  border: 1px solid var(--admin-warning-border, var(--color-warning-border));
   border-radius: 20px;
   padding: 0.1rem 0.4rem;
   white-space: nowrap;
@@ -161,9 +161,9 @@ function kickPlayer(player) {
 
 .kick-btn {
   background: none;
-  border: 1px solid rgba(200,48,48,0.4);
+  border: 1px solid var(--admin-danger-border, var(--color-danger-border));
   border-radius: 4px;
-  color: #ff6b6b;
+  color: var(--admin-danger-text, var(--color-danger));
   padding: 0.1rem 0.35rem;
   font-size: 0.65rem;
   cursor: pointer;
@@ -171,5 +171,5 @@ function kickPlayer(player) {
   transition: all 0.2s;
   margin-left: auto;
 }
-.kick-btn:hover { background: rgba(200,48,48,0.2); border-color: #ff4444; }
+.kick-btn:hover { background: var(--admin-danger-bg, var(--color-danger-soft)); border-color: var(--admin-danger-border, var(--color-danger-border)); }
 </style>

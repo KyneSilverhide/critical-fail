@@ -38,14 +38,14 @@ function levelLabel(level) {
 }
 
 const SCHOOL_COLORS = {
-  abjuration: '#89c4ff',
-  divination: '#c4a0ff',
-  enchantement: '#ff9eb5',
-  évocation: '#ffb347',
-  illusion: '#b0e0e6',
-  invocation: '#98ff98',
-  nécromancie: '#cc99ff',
-  transmutation: '#f0e68c',
+  abjuration: 'var(--school-abjuration)',
+  divination: 'var(--school-divination)',
+  enchantement: 'var(--school-enchantement)',
+  évocation: 'var(--school-evocation)',
+  illusion: 'var(--school-illusion)',
+  invocation: 'var(--school-invocation)',
+  nécromancie: 'var(--school-necromancie)',
+  transmutation: 'var(--school-transmutation)',
 }
 
 function schoolColor(school) {
@@ -53,7 +53,7 @@ function schoolColor(school) {
   for (const [k, v] of Object.entries(SCHOOL_COLORS)) {
     if (key.includes(k)) return v
   }
-  return '#c9a84c'
+  return 'var(--school-default)'
 }
 
 function shortComponent(composantes) {
@@ -151,7 +151,7 @@ onUnmounted(() => {
           <div class="spell-meta-row">
             <span
               class="school-badge"
-              :style="{ color: schoolColor(parseEcole(spell.attributes?.ecole).school), borderColor: schoolColor(parseEcole(spell.attributes?.ecole).school) + '44', background: schoolColor(parseEcole(spell.attributes?.ecole).school) + '15' }"
+              :style="{ '--school-color': schoolColor(parseEcole(spell.attributes?.ecole).school) }"
             >{{ parseEcole(spell.attributes?.ecole).school }}</span>
             <span class="level-badge">
               {{ levelLabel(parseEcole(spell.attributes?.ecole).level) }}
@@ -228,7 +228,7 @@ onUnmounted(() => {
 
 .search-btn {
   padding: 0.6rem 1.1rem;
-  background: linear-gradient(160deg, #4a2010, #2e1008);
+  background: var(--gradient-accent-action);
   border: 1px solid var(--color-gold-dark);
   border-radius: 8px;
   color: var(--color-gold-bright);
@@ -239,7 +239,7 @@ onUnmounted(() => {
   white-space: nowrap;
   transition: all 0.2s;
 }
-.search-btn:hover:not(:disabled) { background: linear-gradient(160deg, #6b3020, #4a1e10); }
+.search-btn:hover:not(:disabled) { background: var(--gradient-accent-action-hover); }
 .search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Loading */
@@ -284,7 +284,7 @@ onUnmounted(() => {
 
 /* Spell card */
 .spell-card {
-  background: linear-gradient(160deg, #1e1610, #130f08);
+  background: var(--gradient-panel-soft);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1rem;
@@ -318,9 +318,9 @@ onUnmounted(() => {
   font-size: 0.55rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #b89ee8;
-  background: rgba(123,94,167,0.15);
-  border: 1px solid rgba(123,94,167,0.4);
+  color: var(--color-info-bright);
+  background: var(--color-info-soft);
+  border: 1px solid var(--color-info-border);
   border-radius: 20px;
   padding: 0.1rem 0.45rem;
   flex-shrink: 0;
@@ -341,6 +341,9 @@ onUnmounted(() => {
   border: 1px solid;
   border-radius: 20px;
   padding: 0.1rem 0.5rem;
+  color: var(--school-color);
+  border-color: color-mix(in oklab, var(--school-color) 50%, transparent);
+  background: color-mix(in oklab, var(--school-color) 16%, transparent);
 }
 
 .level-badge {
@@ -349,8 +352,8 @@ onUnmounted(() => {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-gold-dark);
-  background: rgba(201,168,76,0.1);
-  border: 1px solid rgba(201,168,76,0.3);
+  background: var(--surface-gold-soft);
+  border: 1px solid var(--color-gold-dark);
   border-radius: 20px;
   padding: 0.1rem 0.5rem;
 }
@@ -360,8 +363,8 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.35rem 0.75rem;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface-ghost);
+  border: 1px solid var(--surface-track);
   border-radius: 8px;
   padding: 0.6rem 0.75rem;
 }

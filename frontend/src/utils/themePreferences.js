@@ -1,5 +1,9 @@
 const STORAGE_KEY = 'cf_theme_preferences'
 const VALID_THEMES = new Set(['dark', 'light'])
+const THEME_META_COLORS = {
+  dark: '#120d04',
+  light: '#f5f1e8',
+}
 
 function readAll() {
   try {
@@ -14,12 +18,37 @@ function normalizeScope(scope) {
   return String(scope || '').trim().toLowerCase()
 }
 
+function normalizeTheme(theme, fallback = 'dark') {
+  return VALID_THEMES.has(theme) ? theme : fallback
+}
+
 export function getThemePreference(scope, fallback = 'dark') {
   const safeScope = normalizeScope(scope)
-  if (!safeScope) return fallback
+  const safeFallback = normalizeTheme(fallback)
+  if (!safeScope) return safeFallback
   const all = readAll()
   const value = all[safeScope]
-  return VALID_THEMES.has(value) ? value : fallback
+  return normalizeTheme(value, safeFallback)
+}
+
+export function applyTheme(theme, fallback = 'dark') {
+  const safeTheme = normalizeTheme(theme, normalizeTheme(fallback))
+  if (typeof document === 'undefined') return safeTheme
+
+  const root = document.documentElement
+  root.setAttribute('data-theme', safeTheme)
+  root.style.colorScheme = safeTheme
+
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]')
+  if (metaThemeColor) {
+    metaThemeColor.setAttribute('content', THEME_META_COLORS[safeTheme])
+  }
+
+  return safeTheme
+}
+
+export function applyStoredTheme(scope, fallback = 'dark') {
+  return applyTheme(getThemePreference(scope, fallback), fallback)
 }
 
 export function setThemePreference(scope, theme) {
