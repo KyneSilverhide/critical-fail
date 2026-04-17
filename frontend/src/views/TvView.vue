@@ -18,7 +18,7 @@ const activeMerchant = ref(null)
 const activeDoomClock = ref(null)
 const activeTensionScale = ref(null)
 const now = ref(Date.now())
-let tickInterval = null
+let clockTickInterval = null
 
 // Track HP change animations per player: { id -> { type: 'damage'|'heal', delta: number, key: number } }
 const hpAnimations = ref({})
@@ -120,7 +120,7 @@ const tensionShakeClass = computed(() => {
 let socket = null
 
 onMounted(() => {
-  tickInterval = window.setInterval(() => { now.value = Date.now() }, 250)
+  clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 250)
   socket = io(BACKEND_URL)
 
   socket.on('connect', () => {
@@ -237,7 +237,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (tickInterval) window.clearInterval(tickInterval)
+  if (clockTickInterval) window.clearInterval(clockTickInterval)
   if (socket) socket.disconnect()
 })
 </script>

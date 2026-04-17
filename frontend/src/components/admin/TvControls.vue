@@ -13,7 +13,7 @@ const activeTensionScale = ref(null)
 const tensionTitle = ref('Échelle de tension')
 const tensionSteps = ref(6)
 const tensionDiscreet = ref(false)
-let timerInterval = null
+let clockTickInterval = null
 
 function setMode(mode) {
   const socket = getSocket()
@@ -100,7 +100,7 @@ function handleTensionScaleEnded() {
 }
 
 onMounted(() => {
-  timerInterval = window.setInterval(() => { now.value = Date.now() }, 250)
+  clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 250)
   const socket = getSocket()
   socket.on('tv-mode-changed', handleModeChanged)
   socket.on('admin-state', handleAdminState)
@@ -111,7 +111,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (timerInterval) window.clearInterval(timerInterval)
+  if (clockTickInterval) window.clearInterval(clockTickInterval)
   const socket = getSocket()
   socket.off('tv-mode-changed', handleModeChanged)
   socket.off('admin-state', handleAdminState)
