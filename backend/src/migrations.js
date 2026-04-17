@@ -145,15 +145,10 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS doom_clock_end_at TIMESTAMP;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tension_title VARCHAR(200);
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tension_steps INTEGER;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tension_level INTEGER DEFAULT 0;
-ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tension_discreet BOOLEAN DEFAULT FALSE;
-
-CREATE TABLE IF NOT EXISTS kicked_players (
-  id SERIAL PRIMARY KEY,
-  session_id INTEGER REFERENCES sessions(id),
-  normalized_player_name VARCHAR(120) NOT NULL,
-  kicked_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE (session_id, normalized_player_name)
-);
+ALTER TABLE sessions DROP COLUMN IF EXISTS tension_discreet;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tension_direction VARCHAR(20) DEFAULT 'ascending';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tension_vibration BOOLEAN DEFAULT FALSE;
+DROP TABLE IF EXISTS kicked_players;
 `
 
 async function runMigrations() {

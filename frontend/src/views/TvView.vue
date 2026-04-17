@@ -106,7 +106,11 @@ const doomRemainingLabel = computed(() => {
 
 const tensionProgress = computed(() => {
   if (!activeTensionScale.value?.steps) return 0
-  return Math.min(1, Math.max(0, activeTensionScale.value.level / activeTensionScale.value.steps))
+  const direction = activeTensionScale.value.direction || 'ascending'
+  const progress = direction === 'descending'
+    ? (activeTensionScale.value.steps - activeTensionScale.value.level) / activeTensionScale.value.steps
+    : activeTensionScale.value.level / activeTensionScale.value.steps
+  return Math.min(1, Math.max(0, progress))
 })
 
 const tensionColor = computed(() => {
@@ -117,7 +121,7 @@ const tensionColor = computed(() => {
 })
 
 const tensionShakeClass = computed(() => {
-  if (!activeTensionScale.value) return ''
+  if (!activeTensionScale.value?.vibrationEnabled) return ''
   if (tensionProgress.value < TENSION_SHAKE_MEDIUM_RATIO) return 'shake-soft'
   if (tensionProgress.value < TENSION_SHAKE_HARD_RATIO) return 'shake-medium'
   return 'shake-hard'
@@ -405,11 +409,10 @@ onUnmounted(() => {
       <div
         v-else-if="tvMode === 'tension' && activeTensionScale"
         class="tension-display"
-        :class="[tensionShakeClass, { discreet: activeTensionScale.isDiscreet }]"
         :style="{ '--tension-color': tensionColor }"
       >
-        <h2 v-if="!activeTensionScale.isDiscreet" class="tension-title">{{ activeTensionScale.title }}</h2>
-        <div v-if="!activeTensionScale.isDiscreet" class="tension-steps">
+        <h2 class="tension-title">{{ activeTensionScale.title }}</h2>
+        <div class="tension-steps">
           <div
             v-for="step in activeTensionScale.steps"
             :key="step"
@@ -420,7 +423,9 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="tension-core">
-          <div class="tension-pulse"></div>
+          <div class="tension-pulse-wrap" :class="tensionShakeClass">
+            <div class="tension-pulse"></div>
+          </div>
           <div class="tension-level">
             {{ activeTensionScale.level }}<span>/{{ activeTensionScale.steps }}</span>
           </div>
@@ -502,28 +507,28 @@ onUnmounted(() => {
 /* ── Header (lobby only) ──────────────────────────────────────────────── */
 .tv-header {
   text-align: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.6rem;
 }
 .session-title {
   font-family: var(--font-title);
-  font-size: clamp(2rem, 5vw, 4rem);
+  font-size: clamp(1.2rem, 3vw, 2.4rem);
   color: var(--color-gold-bright);
   text-shadow: 0 0 40px rgba(240,192,64,0.4), 0 2px 0 rgba(0,0,0,0.8);
   letter-spacing: 0.1em;
-  margin: 0.25rem 0;
+  margin: 0.15rem 0;
 }
 .lobby-ornament {
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-size: clamp(0.9rem, 1.8vw, 1.5rem);
   color: var(--color-gold-dark);
   opacity: 0.8;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
 }
 .lobby-divider {
   font-family: var(--font-heading);
-  font-size: clamp(0.8rem, 1.5vw, 1.1rem);
+  font-size: clamp(0.48rem, 0.9vw, 0.66rem);
   letter-spacing: 0.5em;
   color: var(--color-gold-dark);
-  margin-top: 0.5rem;
+  margin-top: 0.3rem;
 }
 
 /* ── Lobby mode ───────────────────────────────────────────────────────── */
@@ -533,28 +538,28 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 0.9rem;
 }
 .lobby-title {
   font-family: var(--font-title);
-  font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+  font-size: clamp(1.08rem, 2.1vw, 1.68rem);
   color: var(--color-parchment);
   text-shadow: 0 0 20px rgba(240,192,64,0.3), 0 2px 4px rgba(0,0,0,0.8);
   letter-spacing: 0.08em;
   margin: 0;
 }
 .lobby-qr {
-  width: clamp(200px, 30vw, 400px);
-  height: clamp(200px, 30vw, 400px);
-  border: 4px solid var(--color-gold-dark);
-  border-radius: 16px;
+  width: clamp(120px, 18vw, 240px);
+  height: clamp(120px, 18vw, 240px);
+  border: 2px solid var(--color-gold-dark);
+  border-radius: 10px;
   background: white;
-  padding: 8px;
+  padding: 5px;
   box-shadow: 0 0 40px rgba(201,168,76,0.2);
 }
 .lobby-code {
   font-family: var(--font-title);
-  font-size: clamp(4rem, 12vw, 8rem);
+  font-size: clamp(2.4rem, 7.2vw, 4.8rem);
   color: var(--color-gold-bright);
   text-shadow: 0 0 60px rgba(240,192,64,0.6), 0 4px 0 rgba(0,0,0,0.8);
   letter-spacing: 0.2em;
@@ -562,7 +567,7 @@ onUnmounted(() => {
 }
 .lobby-hint {
   font-family: var(--font-heading);
-  font-size: clamp(0.7rem, 1.5vw, 1rem);
+  font-size: clamp(0.42rem, 0.9vw, 0.6rem);
   letter-spacing: 0.25em;
   text-transform: uppercase;
   color: var(--color-text-dim);
@@ -1013,6 +1018,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
 }
+.tension-pulse-wrap {
+  position: absolute;
+  inset: 0;
+}
 .tension-pulse {
   position: absolute;
   inset: 0;
@@ -1033,11 +1042,9 @@ onUnmounted(() => {
   font-size: 0.35em;
   color: var(--color-text-dim);
 }
-.tension-display.discreet .tension-title,
-.tension-display.discreet .tension-steps { display: none; }
-.tension-display.shake-soft { animation: shakeSoft 0.32s infinite; }
-.tension-display.shake-medium { animation: shakeMedium 0.2s infinite; }
-.tension-display.shake-hard { animation: shakeHard 0.12s infinite; }
+.tension-pulse-wrap.shake-soft { animation: shakeSoft 0.32s infinite; }
+.tension-pulse-wrap.shake-medium { animation: shakeMedium 0.2s infinite; }
+.tension-pulse-wrap.shake-hard { animation: shakeHard 0.12s infinite; }
 @keyframes tensionPulse {
   0% { transform: scale(0.96); opacity: 0.55; }
   70% { transform: scale(1.06); opacity: 1; }
