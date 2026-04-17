@@ -7,7 +7,6 @@ const MIN_DOOM_DURATION_SECONDS = 5
 const MAX_DOOM_DURATION_SECONDS = 24 * 60 * 60
 const MIN_TENSION_STEPS = 2
 const MAX_TENSION_STEPS = 20
-const DEFAULT_TENSION_STEPS = 5
 const MAX_TITLE_LENGTH = 200
 
 async function getMerchantData(merchantId) {
@@ -313,7 +312,12 @@ function setupSocket(io) {
     socket.on('start-doom-clock', async ({ sessionId, title, durationSeconds }) => {
       if (!socket.admin) return
       try {
-        const safeDuration = Math.max(MIN_DOOM_DURATION_SECONDS, Math.min(MAX_DOOM_DURATION_SECONDS, parseInt(durationSeconds) || 60))
+        const parsedDuration = parseInt(durationSeconds, 10)
+        if (Number.isNaN(parsedDuration)) {
+          socket.emit('tv-control-error', { message: 'Durée invalide pour la Doom clock.' })
+          return
+        }
+        const safeDuration = Math.max(MIN_DOOM_DURATION_SECONDS, Math.min(MAX_DOOM_DURATION_SECONDS, parsedDuration))
         const endAt = new Date(Date.now() + safeDuration * 1000)
         const safeTitle = (title || 'DOOM CLOCK').trim().slice(0, MAX_TITLE_LENGTH) || 'DOOM CLOCK'
         await pool.query(
@@ -351,7 +355,12 @@ function setupSocket(io) {
     socket.on('create-tension-scale', async ({ sessionId, title, steps, isDiscreet }) => {
       if (!socket.admin) return
       try {
-        const safeSteps = Math.max(MIN_TENSION_STEPS, Math.min(MAX_TENSION_STEPS, parseInt(steps) || DEFAULT_TENSION_STEPS))
+        const parsedSteps = parseInt(steps, 10)
+        if (Number.isNaN(parsedSteps)) {
+          socket.emit('tv-control-error', { message: "Nombre d'étapes invalide pour l'échelle de tension." })
+          return
+        }
+        const safeSteps = Math.max(MIN_TENSION_STEPS, Math.min(MAX_TENSION_STEPS, parsedSteps))
         const safeTitle = (title || 'Échelle de tension').trim().slice(0, MAX_TITLE_LENGTH) || 'Échelle de tension'
         const result = await pool.query(
           `UPDATE sessions

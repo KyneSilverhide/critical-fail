@@ -8,6 +8,7 @@ const activeDoomClock = ref(null)
 const doomTitle = ref('Doom Clock')
 const doomMinutes = ref(2)
 const doomSeconds = ref(0)
+const controlError = ref('')
 const now = ref(Date.now())
 const activeTensionScale = ref(null)
 const tensionTitle = ref('Échelle de tension')
@@ -99,6 +100,11 @@ function handleTensionScaleEnded() {
   activeTensionScale.value = null
 }
 
+function handleTvControlError({ message }) {
+  controlError.value = message || 'Erreur lors de la mise à jour TV.'
+  window.setTimeout(() => { controlError.value = '' }, 3000)
+}
+
 onMounted(() => {
   clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 1000)
   const socket = getSocket()
@@ -108,6 +114,7 @@ onMounted(() => {
   socket.on('doom-clock-stopped', handleDoomClockStopped)
   socket.on('tension-scale-updated', handleTensionScaleUpdated)
   socket.on('tension-scale-ended', handleTensionScaleEnded)
+  socket.on('tv-control-error', handleTvControlError)
 })
 
 onUnmounted(() => {
@@ -119,6 +126,7 @@ onUnmounted(() => {
   socket.off('doom-clock-stopped', handleDoomClockStopped)
   socket.off('tension-scale-updated', handleTensionScaleUpdated)
   socket.off('tension-scale-ended', handleTensionScaleEnded)
+  socket.off('tv-control-error', handleTvControlError)
 })
 </script>
 
@@ -144,7 +152,7 @@ onUnmounted(() => {
         <input v-model="doomTitle" class="form-input" type="text" placeholder="Titre du compte à rebours" />
       </div>
       <div class="form-row split">
-        <input v-model.number="doomMinutes" class="form-input" type="number" min="0" max="120" placeholder="Minutes" />
+        <input v-model.number="doomMinutes" class="form-input" type="number" min="0" max="1440" placeholder="Minutes" />
         <input v-model.number="doomSeconds" class="form-input" type="number" min="0" max="59" placeholder="Secondes" />
       </div>
       <div class="inline-actions">
@@ -173,6 +181,7 @@ onUnmounted(() => {
       <p v-if="activeTensionScale" class="status-line">
         {{ activeTensionScale.title }} — {{ activeTensionScale.level }} / {{ activeTensionScale.steps }} ({{ tensionRatio }}%)
       </p>
+      <p v-if="controlError" class="error-line">{{ controlError }}</p>
     </section>
   </div>
 </template>
@@ -260,5 +269,11 @@ onUnmounted(() => {
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   color: var(--color-text-dim);
+}
+.error-line {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: #ff6b6b;
 }
 </style>
