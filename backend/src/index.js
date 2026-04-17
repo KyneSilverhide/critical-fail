@@ -17,6 +17,8 @@ const setupSocket = require('./socket')
 const app = express()
 const server = http.createServer(app)
 
+app.set('trust proxy', 1)
+
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
 const io = new Server(server, {
