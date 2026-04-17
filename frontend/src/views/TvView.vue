@@ -50,8 +50,8 @@ function temporaryHp(player) {
 function displayedCurrentHp(player) {
   const current = Number(player.current_hp ?? 0)
   const max = Number(player.max_hp)
-  if (!Number.isFinite(max) || max <= 0) return current
-  return Math.min(current, max)
+  if (!Number.isFinite(max) || max <= 0) return Math.max(0, current)
+  return Math.max(0, Math.min(current, max))
 }
 
 function resolveMediaUrl(url) {

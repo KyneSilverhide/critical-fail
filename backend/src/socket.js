@@ -181,7 +181,7 @@ function setupSocket(io) {
         const sessionResult = await pool.query(
           "SELECT * FROM sessions WHERE code = $1 AND status = 'active'", [code])
         const session = sessionResult.rows[0]
-        if (!session) { socket.emit('error', { message: 'Session not found or closed.' }); return }
+        if (!session) { socket.emit('error', { message: 'Session introuvable ou fermée.' }); return }
         const acVal = Math.max(1, parseInt(ac) || 10)
         const hpVal = Math.max(1, parseInt(hp) || 20)
         const classVal = dndClass || null
@@ -244,7 +244,7 @@ function setupSocket(io) {
           const joinEvent = { eventType: 'join', description: `${cleanName} a rejoint la session`, playerName: cleanName, createdAt: new Date() }
           io.to(`admin:${session.id}`).emit('session-event', joinEvent)
         }
-      } catch (err) { console.error(err); socket.emit('error', { message: 'Failed to join session.' }) }
+      } catch (err) { console.error(err); socket.emit('error', { message: 'Impossible de rejoindre la session.' }) }
     })
 
     socket.on('leave-session', async () => { await removePlayer(socket) })
