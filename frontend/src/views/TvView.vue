@@ -4,10 +4,10 @@ import { useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
 
 const DOOM_DANGER_THRESHOLD_SECONDS = 10
-const TENSION_COLOR_MEDIUM_THRESHOLD = 0.33
-const TENSION_COLOR_HIGH_THRESHOLD = 0.66
-const TENSION_SHAKE_MEDIUM_THRESHOLD = 0.4
-const TENSION_SHAKE_HARD_THRESHOLD = 0.75
+const TENSION_COLOR_MEDIUM_RATIO = 0.33
+const TENSION_COLOR_HIGH_RATIO = 0.66
+const TENSION_SHAKE_MEDIUM_RATIO = 0.4
+const TENSION_SHAKE_HARD_RATIO = 0.75
 
 const route = useRoute()
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
@@ -111,15 +111,15 @@ const tensionProgress = computed(() => {
 
 const tensionColor = computed(() => {
   const p = tensionProgress.value
-  if (p < TENSION_COLOR_MEDIUM_THRESHOLD) return '#2fb896'
-  if (p < TENSION_COLOR_HIGH_THRESHOLD) return '#f0a500'
+  if (p < TENSION_COLOR_MEDIUM_RATIO) return '#2fb896'
+  if (p < TENSION_COLOR_HIGH_RATIO) return '#f0a500'
   return '#e03030'
 })
 
 const tensionShakeClass = computed(() => {
   if (!activeTensionScale.value) return ''
-  if (tensionProgress.value < TENSION_SHAKE_MEDIUM_THRESHOLD) return 'shake-soft'
-  if (tensionProgress.value < TENSION_SHAKE_HARD_THRESHOLD) return 'shake-medium'
+  if (tensionProgress.value < TENSION_SHAKE_MEDIUM_RATIO) return 'shake-soft'
+  if (tensionProgress.value < TENSION_SHAKE_HARD_RATIO) return 'shake-medium'
   return 'shake-hard'
 })
 

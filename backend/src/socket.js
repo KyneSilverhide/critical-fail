@@ -20,6 +20,7 @@ async function getMerchantData(merchantId) {
   return { ...merchant, items: items.rows }
 }
 
+// Normalize player names for case-insensitive and accent-insensitive kick matching.
 function normalizePlayerName(name) {
   return String(name || '')
     .normalize('NFD')
@@ -314,7 +315,7 @@ function setupSocket(io) {
       try {
         const parsedDuration = parseInt(durationSeconds, 10)
         if (Number.isNaN(parsedDuration)) {
-          socket.emit('tv-control-error', { message: 'Durée invalide pour la Doom clock.' })
+          socket.emit('tv-control-error', { message: 'Durée invalide (entre 5 secondes et 24 heures).' })
           return
         }
         const safeDuration = Math.max(MIN_DOOM_DURATION_SECONDS, Math.min(MAX_DOOM_DURATION_SECONDS, parsedDuration))
@@ -357,7 +358,7 @@ function setupSocket(io) {
       try {
         const parsedSteps = parseInt(steps, 10)
         if (Number.isNaN(parsedSteps)) {
-          socket.emit('tv-control-error', { message: "Nombre d'étapes invalide pour l'échelle de tension." })
+          socket.emit('tv-control-error', { message: "Nombre d'étapes invalide (entre 2 et 20)." })
           return
         }
         const safeSteps = Math.max(MIN_TENSION_STEPS, Math.min(MAX_TENSION_STEPS, parsedSteps))
