@@ -1,13 +1,16 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { getSocket, resetSocket } from '../socket.js'
 import { sessionStore } from '../stores/session.js'
 import MessageCard from '../components/player/MessageCard.vue'
 import SpellSearchTool from '../components/player/SpellSearchTool.vue'
 import PlayerNotesTool from '../components/player/PlayerNotesTool.vue'
+import { getLastKnownPlayer, saveLastKnownPlayer, removeLastKnownPlayer } from '../utils/playerSessionMemory.js'
+import { getThemePreference, setThemePreference } from '../utils/themePreferences.js'
 
 const router = useRouter()
+const route = useRoute()
 const messages = ref([])
 const unreadMessages = ref(0)
 const playerInfo = ref(sessionStore.playerInfo || { name: 'Aventurier', hp: 20, maxHp: 20, ac: 10 })
@@ -22,6 +25,91 @@ const MAX_HP_LIMIT = 9999
 // Tabs: 'combat' | 'outils' | 'boutique' | 'vote' | 'messages'
 const activeTab = ref('combat')
 let hasRequestedNotificationPermission = false
+const rejoinError = ref('')
+const rejoining = ref(false)
+const theme = ref(getThemePreference('player', 'dark'))
+const isLightTheme = computed(() => theme.value === 'light')
+
+function toggleTheme() {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  setThemePreference('player', theme.value)
+}
+
+function currentSessionCode() {
+  return sessionStore.activeSession?.code || String(route.params.code || '').trim()
+}
+
+function rememberCurrentPlayer(sessionCode = currentSessionCode()) {
+  if (!sessionCode || !playerInfo.value?.name) return
+  saveLastKnownPlayer(sessionCode, {
+    name: playerInfo.value.name,
+    ac: playerInfo.value.ac,
+    hp: currentHp.value,
+    dndClass: playerInfo.value.dndClass,
+    avatarUrl: playerInfo.value.avatarUrl,
+  })
+}
+
+function applyJoinedState(data) {
+  sessionStore.setActiveSession(data.session)
+  sessionStore.playerInfo = {
+    id: data.player.id,
+    name: data.player.player_name,
+    ac: data.player.ac,
+    hp: data.player.current_hp,
+    maxHp: data.player.max_hp,
+    initiative: data.player.initiative,
+    dndClass: data.player.dnd_class,
+    avatarUrl: data.player.avatar_url,
+  }
+  sessionStore.activeMerchant = data.activeMerchant || null
+  playerInfo.value = { ...sessionStore.playerInfo }
+  sessionName.value = data.session.name
+  currentHp.value = data.player.current_hp
+  maxHp.value = data.player.max_hp
+  pendingHp.value = data.player.current_hp
+  initiativeValue.value = data.player.initiative
+  rememberCurrentPlayer(data.session.code)
+}
+
+async function rejoinFromKnownPlayer(sessionCode) {
+  const knownPlayer = getLastKnownPlayer(sessionCode)
+  if (!knownPlayer) {
+    rejoinError.value = 'Aucun joueur mémorisé sur cet appareil pour cette session.'
+    return false
+  }
+
+  rejoining.value = true
+  rejoinError.value = ''
+  const socket = getSocket()
+
+  return await new Promise((resolve) => {
+    const onJoined = (data) => {
+      socket.off('error', onError)
+      rejoining.value = false
+      applyJoinedState(data)
+      resolve(true)
+    }
+
+    const onError = (err) => {
+      socket.off('session-joined', onJoined)
+      rejoining.value = false
+      rejoinError.value = err?.message || 'Impossible de reprendre la session automatiquement.'
+      resolve(false)
+    }
+
+    socket.once('session-joined', onJoined)
+    socket.once('error', onError)
+    socket.emit('join-session', {
+      code: sessionCode,
+      playerName: knownPlayer.name,
+      ac: knownPlayer.ac,
+      hp: knownPlayer.hp,
+      dndClass: knownPlayer.dndClass || null,
+      avatarUrl: knownPlayer.avatarUrl || null,
+    })
+  })
+}
 
 function requestNotificationPermissionOnce() {
   if (hasRequestedNotificationPermission) return
@@ -280,6 +368,7 @@ const handleHpConfirmed = (data) => {
   currentHp.value = data.newHp
   pendingHp.value = data.newHp
   if (sessionStore.playerInfo) sessionStore.playerInfo.hp = data.newHp
+  rememberCurrentPlayer()
   hpSending.value = false
   hpSent.value = true
   setTimeout(() => { hpSent.value = false }, 2000)
@@ -290,6 +379,7 @@ const handleConcentrationConfirmed = (data) => {
 const handleInitiativeConfirmed = (data) => {
   initiativeValue.value = data.initiative
   if (sessionStore.playerInfo) sessionStore.playerInfo.initiative = data.initiative
+  rememberCurrentPlayer()
   initiativeSending.value = false
   initiativeSent.value = true
   setTimeout(() => { initiativeSent.value = false }, 2000)
@@ -354,6 +444,7 @@ const handlePurchaseError = ({ message }) => {
 }
 
 function handleKicked() {
+  removeLastKnownPlayer(currentSessionCode())
   resetSocket()
   sessionStore.setActiveSession(null)
   sessionStore.playerInfo = null
@@ -367,8 +458,23 @@ function handleBeforeUnload() {
   }
 }
 
-onMounted(() => {
-  if (!sessionStore.activeSession) { router.push('/join'); return }
+onMounted(async () => {
+  const routeCode = String(route.params.code || '').trim()
+
+  if (!sessionStore.activeSession) {
+    if (!routeCode) {
+      router.push('/join')
+      return
+    }
+    const joined = await rejoinFromKnownPlayer(routeCode)
+    if (!joined) return
+  }
+
+  const activeCode = sessionStore.activeSession?.code
+  if (activeCode && routeCode !== activeCode) {
+    router.replace(`/view/${activeCode}`)
+  }
+
   requestNotificationPermissionOnce()
   const socket = getSocket()
   socket.on('new-message', handleNewMessage)
@@ -426,7 +532,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="inbox-wrapper">
+  <div class="inbox-wrapper" :class="{ 'theme-light': isLightTheme }">
 
     <!-- ── Concentration modal ───────────────────────────────────────────── -->
     <Teleport to="body">
@@ -492,12 +598,26 @@ onUnmounted(() => {
       </div>
       <div class="header-right">
         <span class="ac-chip">🛡️ {{ playerInfo?.ac ?? 10 }}</span>
+        <button class="theme-toggle-btn" @click="toggleTheme">
+          {{ isLightTheme ? '🌙 Sombre' : '☀️ Clair' }}
+        </button>
         <button class="leave-btn" @click="leaveSession">Quitter</button>
       </div>
     </header>
 
+    <section v-if="rejoining" class="resume-state">
+      <p class="resume-title">Reconnexion à la session…</p>
+      <p class="resume-sub">Chargement du dernier joueur connu sur cet appareil.</p>
+    </section>
+
+    <section v-else-if="rejoinError" class="resume-state error">
+      <p class="resume-title">Session non récupérable automatiquement</p>
+      <p class="resume-sub">{{ rejoinError }}</p>
+      <button class="resume-action-btn" @click="router.push(`/join/${route.params.code || ''}`)">Rejoindre manuellement</button>
+    </section>
+
     <!-- ── Scrollable content ────────────────────────────────────────────── -->
-    <main class="inbox-content">
+    <main v-else class="inbox-content">
 
       <!-- ── COMBAT tab (Statut + Conditions) ───────────────────────────── -->
       <div v-show="activeTab === 'combat'" class="tab-panel">
@@ -728,7 +848,7 @@ onUnmounted(() => {
     </main>
 
     <!-- ── Bottom tab bar ────────────────────────────────────────────────── -->
-    <nav class="tab-bar">
+    <nav v-if="!rejoining && !rejoinError" class="tab-bar">
       <button
         class="tab-item"
         :class="{ active: activeTab === 'combat' }"
@@ -790,6 +910,26 @@ onUnmounted(() => {
   background: var(--color-bg);
 }
 
+.inbox-wrapper.theme-light {
+  --color-bg: #f3ecde;
+  --color-bg2: #ece2d0;
+  --color-parchment: #2f2416;
+  --color-parchment-dark: #6d5a40;
+  --color-gold: #9c7129;
+  --color-gold-bright: #b5822f;
+  --color-gold-dark: #8f6927;
+  --color-red: #b04141;
+  --color-red-bright: #c65252;
+  --color-crimson: #933131;
+  --color-text: #3b2e1e;
+  --color-text-dim: #6f5e47;
+  --color-border: #ccbca0;
+  --color-shadow: rgba(50, 36, 18, 0.18);
+  --color-surface: #fff8ea;
+  --color-surface-alt: #f5ecdd;
+  --color-surface-soft: #efe2cd;
+}
+
 /* ── Header ──────────────────────────────────────────────────────────── */
 .inbox-header {
   display: flex;
@@ -803,6 +943,24 @@ onUnmounted(() => {
 }
 .header-left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .header-right { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+
+.theme-toggle-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.theme-toggle-btn:hover {
+  color: var(--color-gold-bright);
+  border-color: var(--color-gold-dark);
+}
 
 .player-avatar-wrap {
   width: 38px; height: 38px;
@@ -860,6 +1018,48 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .leave-btn:hover { border-color: var(--color-red); color: #ff6b6b; }
+
+.resume-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1.2rem;
+  text-align: center;
+}
+.resume-state.error {
+  color: var(--color-red);
+}
+.resume-title {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  color: var(--color-parchment);
+}
+.resume-sub {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--color-text-dim);
+  max-width: 440px;
+}
+.resume-action-btn {
+  margin-top: 0.2rem;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-gold-dark);
+  background: rgba(180,120,20,0.15);
+  color: var(--color-gold);
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.resume-action-btn:hover {
+  background: rgba(180,120,20,0.3);
+}
 
 /* ── Scrollable content ──────────────────────────────────────────────── */
 .inbox-content {

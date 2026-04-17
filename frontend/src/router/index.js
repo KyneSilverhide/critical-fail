@@ -16,6 +16,7 @@ const routes = [
     meta: { requiresAuth: true }
   },
   { path: '/join/:code?', component: PlayerJoinView },
+  { path: '/view/:code', component: PlayerInboxView },
   { path: '/player', component: PlayerInboxView },
   { path: '/tv/:code', component: TvView },
 ]

@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { getSocket } from '../socket.js'
 import { sessionStore } from '../stores/session.js'
 import { getProfile, saveProfile } from '../utils/playerProfiles.js'
+import { saveLastKnownPlayer } from '../utils/playerSessionMemory.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -28,7 +29,8 @@ const DND_CLASSES = [
 
 onMounted(() => {
   if (sessionStore.activeSession && sessionStore.playerInfo) {
-    router.replace('/player')
+    const code = sessionStore.activeSession.code
+    router.replace(code ? `/view/${code}` : '/player')
   }
 })
 
@@ -126,7 +128,14 @@ async function joinSession() {
           avatarUrl: data.player.avatar_url,
         }
       sessionStore.activeMerchant = data.activeMerchant || null
-      router.push('/player')
+      saveLastKnownPlayer(data.session.code, {
+        name: data.player.player_name,
+        ac: data.player.ac,
+        hp: data.player.current_hp,
+        dndClass: data.player.dnd_class,
+        avatarUrl: data.player.avatar_url,
+      })
+      router.push(`/view/${data.session.code}`)
     })
 
     socket.once('error', (err) => {
