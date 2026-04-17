@@ -1,7 +1,13 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
+
+const DOOM_DANGER_THRESHOLD_SECONDS = 10
+const TENSION_COLOR_MEDIUM_RATIO = 0.33
+const TENSION_COLOR_HIGH_RATIO = 0.66
+const TENSION_SHAKE_MEDIUM_RATIO = 0.4
+const TENSION_SHAKE_HARD_RATIO = 0.75
 
 const route = useRoute()
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
@@ -15,6 +21,10 @@ const sessionCode = ref('')
 const currentImageUrl = ref(null)
 const activeVote = ref(null)
 const activeMerchant = ref(null)
+const activeDoomClock = ref(null)
+const activeTensionScale = ref(null)
+const now = ref(Date.now())
+let clockTickInterval = null
 
 // Track HP change animations per player: { id -> { type: 'damage'|'heal', delta: number, key: number } }
 const hpAnimations = ref({})
@@ -83,9 +93,40 @@ function voterNamesFor(optionIndex) {
     .join(', ')
 }
 
+const doomRemaining = computed(() => {
+  if (!activeDoomClock.value?.endAt) return 0
+  return Math.max(0, Math.floor((new Date(activeDoomClock.value.endAt).getTime() - now.value) / 1000))
+})
+
+const doomRemainingLabel = computed(() => {
+  const mins = Math.floor(doomRemaining.value / 60)
+  const secs = doomRemaining.value % 60
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+})
+
+const tensionProgress = computed(() => {
+  if (!activeTensionScale.value?.steps) return 0
+  return Math.min(1, Math.max(0, activeTensionScale.value.level / activeTensionScale.value.steps))
+})
+
+const tensionColor = computed(() => {
+  const p = tensionProgress.value
+  if (p < TENSION_COLOR_MEDIUM_RATIO) return '#2fb896'
+  if (p < TENSION_COLOR_HIGH_RATIO) return '#f0a500'
+  return '#e03030'
+})
+
+const tensionShakeClass = computed(() => {
+  if (!activeTensionScale.value) return ''
+  if (tensionProgress.value < TENSION_SHAKE_MEDIUM_RATIO) return 'shake-soft'
+  if (tensionProgress.value < TENSION_SHAKE_HARD_RATIO) return 'shake-medium'
+  return 'shake-hard'
+})
+
 let socket = null
 
 onMounted(() => {
+  clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 1000)
   socket = io(BACKEND_URL)
 
   socket.on('connect', () => {
@@ -101,6 +142,8 @@ onMounted(() => {
     currentImageUrl.value = data.currentImageUrl || null
     activeVote.value = data.activeVote || null
     activeMerchant.value = data.activeMerchant || null
+    activeDoomClock.value = data.doomClock || null
+    activeTensionScale.value = data.tensionScale || null
     data.players.forEach(pl => { previousHp.value[pl.id] = pl.current_hp })
   })
 
@@ -181,9 +224,26 @@ onMounted(() => {
   socket.on('merchant-items-updated', (merchantData) => {
     activeMerchant.value = merchantData
   })
+
+  socket.on('doom-clock-started', (doomClock) => {
+    activeDoomClock.value = doomClock
+  })
+
+  socket.on('doom-clock-stopped', () => {
+    activeDoomClock.value = null
+  })
+
+  socket.on('tension-scale-updated', (tensionScale) => {
+    activeTensionScale.value = tensionScale
+  })
+
+  socket.on('tension-scale-ended', () => {
+    activeTensionScale.value = null
+  })
 })
 
 onUnmounted(() => {
+  if (clockTickInterval) window.clearInterval(clockTickInterval)
   if (socket) socket.disconnect()
 })
 </script>
@@ -323,6 +383,38 @@ onUnmounted(() => {
         <div v-else class="vote-waiting">
           <div class="vote-orb"></div>
           <p>Vote en cours…</p>
+        </div>
+      </div>
+
+      <!-- Doom clock mode -->
+      <div v-else-if="tvMode === 'doom'" class="doom-display">
+        <h2 class="doom-title">{{ activeDoomClock?.title || 'DOOM CLOCK' }}</h2>
+        <div class="doom-timer" :class="{ danger: doomRemaining <= DOOM_DANGER_THRESHOLD_SECONDS }">{{ doomRemainingLabel }}</div>
+      </div>
+
+      <!-- Tension mode -->
+      <div
+        v-else-if="tvMode === 'tension' && activeTensionScale"
+        class="tension-display"
+        :class="[tensionShakeClass, { discreet: activeTensionScale.isDiscreet }]"
+        :style="{ '--tension-color': tensionColor }"
+      >
+        <h2 v-if="!activeTensionScale.isDiscreet" class="tension-title">{{ activeTensionScale.title }}</h2>
+        <div v-if="!activeTensionScale.isDiscreet" class="tension-steps">
+          <div
+            v-for="step in activeTensionScale.steps"
+            :key="step"
+            class="tension-step"
+            :class="{ active: step <= activeTensionScale.level }"
+          >
+            {{ step }}
+          </div>
+        </div>
+        <div class="tension-core">
+          <div class="tension-pulse"></div>
+          <div class="tension-level">
+            {{ activeTensionScale.level }}<span>/{{ activeTensionScale.steps }}</span>
+          </div>
         </div>
       </div>
 
@@ -818,6 +910,133 @@ onUnmounted(() => {
   font-size: clamp(1rem, 2vw, 1.4rem);
   letter-spacing: 0.2em;
   color: var(--color-parchment);
+}
+
+/* ── Doom mode ────────────────────────────────────────────────────────── */
+.doom-display {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+.doom-title {
+  font-family: var(--font-title);
+  font-size: clamp(2rem, 5vw, 4rem);
+  letter-spacing: 0.12em;
+  color: var(--color-gold-bright);
+  text-transform: uppercase;
+  margin: 0;
+}
+.doom-timer {
+  font-family: var(--font-title);
+  font-size: clamp(5rem, 16vw, 13rem);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--color-parchment);
+  text-shadow: 0 0 35px rgba(240,192,64,0.35), 0 4px 0 rgba(0,0,0,0.8);
+}
+.doom-timer.danger {
+  color: #ff4d4d;
+  animation: doomPulse 0.75s infinite;
+}
+@keyframes doomPulse {
+  0%, 100% { transform: scale(1); text-shadow: 0 0 20px rgba(255,77,77,0.5); }
+  50% { transform: scale(1.03); text-shadow: 0 0 45px rgba(255,77,77,0.9); }
+}
+
+/* ── Tension mode ─────────────────────────────────────────────────────── */
+.tension-display {
+  --tension-color: #f0a500;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+}
+.tension-title {
+  font-family: var(--font-title);
+  font-size: clamp(1.6rem, 4vw, 3rem);
+  color: var(--color-gold-bright);
+  margin: 0;
+}
+.tension-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 0.6rem;
+  width: min(980px, 100%);
+}
+.tension-step {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  text-align: center;
+  padding: 0.55rem 0;
+  font-family: var(--font-heading);
+  color: var(--color-text-dim);
+  background: rgba(255,255,255,0.02);
+}
+.tension-step.active {
+  color: var(--color-parchment);
+  border-color: var(--tension-color);
+  background: color-mix(in oklab, var(--tension-color) 25%, black);
+  box-shadow: 0 0 16px color-mix(in oklab, var(--tension-color) 50%, transparent);
+}
+.tension-core {
+  position: relative;
+  width: clamp(180px, 30vw, 290px);
+  height: clamp(180px, 30vw, 290px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tension-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 4px solid var(--tension-color);
+  box-shadow: 0 0 35px color-mix(in oklab, var(--tension-color) 55%, transparent);
+  animation: tensionPulse 1.25s infinite;
+}
+.tension-level {
+  position: relative;
+  font-family: var(--font-title);
+  font-size: clamp(3rem, 8vw, 6rem);
+  line-height: 1;
+  color: var(--tension-color);
+  text-shadow: 0 0 25px color-mix(in oklab, var(--tension-color) 45%, transparent);
+}
+.tension-level span {
+  font-size: 0.35em;
+  color: var(--color-text-dim);
+}
+.tension-display.discreet .tension-title,
+.tension-display.discreet .tension-steps { display: none; }
+.tension-display.shake-soft { animation: shakeSoft 0.32s infinite; }
+.tension-display.shake-medium { animation: shakeMedium 0.2s infinite; }
+.tension-display.shake-hard { animation: shakeHard 0.12s infinite; }
+@keyframes tensionPulse {
+  0% { transform: scale(0.96); opacity: 0.55; }
+  70% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1.09); opacity: 0.2; }
+}
+@keyframes shakeSoft {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(1px, -1px); }
+}
+@keyframes shakeMedium {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-2px, 1px); }
+  75% { transform: translate(2px, -1px); }
+}
+@keyframes shakeHard {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-3px, 2px); }
+  40% { transform: translate(3px, -2px); }
+  60% { transform: translate(-2px, -1px); }
+  80% { transform: translate(2px, 1px); }
 }
 
 /* ── Image mode ───────────────────────────────────────────────────────── */

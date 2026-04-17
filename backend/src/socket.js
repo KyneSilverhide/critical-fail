@@ -3,6 +3,12 @@ const QRCode = require('qrcode')
 const crypto = require('crypto')
 const pool = require('./db')
 
+const MIN_DOOM_DURATION_SECONDS = 5
+const MAX_DOOM_DURATION_SECONDS = 24 * 60 * 60
+const MIN_TENSION_STEPS = 2
+const MAX_TENSION_STEPS = 20
+const MAX_TITLE_LENGTH = 200
+
 async function getMerchantData(merchantId) {
   const mr = await pool.query('SELECT * FROM merchants WHERE id = $1', [merchantId])
   const merchant = mr.rows[0]
@@ -12,6 +18,57 @@ async function getMerchantData(merchantId) {
     [merchantId]
   )
   return { ...merchant, items: items.rows }
+}
+
+// Normalize player names for case-insensitive and accent-insensitive kick matching.
+function normalizePlayerName(name) {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function serializeDoomClock(session) {
+  if (!session?.doom_clock_end_at) return null
+  const endAt = new Date(session.doom_clock_end_at)
+  if (Number.isNaN(endAt.getTime()) || endAt.getTime() <= Date.now()) return null
+  return {
+    title: session.doom_clock_title || 'DOOM CLOCK',
+    endAt: endAt.toISOString(),
+  }
+}
+
+function serializeTensionScale(session) {
+  const steps = parseInt(session?.tension_steps) || 0
+  if (!session?.tension_title || steps <= 0) return null
+  return {
+    title: session.tension_title,
+    steps,
+    level: Math.max(0, Math.min(steps, parseInt(session.tension_level) || 0)),
+    isDiscreet: !!session.tension_discreet,
+  }
+}
+
+async function getActiveVote(sessionId, voteId) {
+  if (!voteId) return null
+  const voteInfo = await pool.query('SELECT * FROM votes WHERE id = $1 AND status = $2', [voteId, 'active'])
+  const vote = voteInfo.rows[0]
+  if (!vote) return null
+  const options = typeof vote.options === 'string' ? JSON.parse(vote.options) : vote.options
+  const responses = await pool.query('SELECT option_index, player_name FROM vote_responses WHERE vote_id = $1', [vote.id])
+  const results = options.map((_, i) => responses.rows.filter(r => r.option_index === i).length)
+  const totalPlayers = await pool.query('SELECT COUNT(*)::int AS total FROM players WHERE session_id = $1', [sessionId])
+  return {
+    id: vote.id,
+    question: vote.question,
+    options,
+    isAnonymous: vote.is_anonymous,
+    results,
+    totalPlayers: totalPlayers.rows[0].total,
+    totalVotes: responses.rows.length,
+    voterNames: responses.rows.map(r => ({ name: r.player_name, optionIndex: r.option_index })),
+  }
 }
 
 function setupSocket(io) {
@@ -59,6 +116,15 @@ function setupSocket(io) {
           "SELECT * FROM sessions WHERE code = $1 AND status = 'active'", [code])
         const session = sessionResult.rows[0]
         if (!session) { socket.emit('error', { message: 'Session not found or closed.' }); return }
+        const normalizedName = normalizePlayerName(playerName)
+        const kicked = await pool.query(
+          'SELECT id FROM kicked_players WHERE session_id = $1 AND normalized_player_name = $2',
+          [session.id, normalizedName]
+        )
+        if (kicked.rows[0]) {
+          socket.emit('error', { message: 'Vous avez été expulsé de cette session.' })
+          return
+        }
 
         const acVal = Math.max(1, parseInt(ac) || 10)
         const hpVal = Math.max(1, parseInt(hp) || 20)
@@ -175,13 +241,24 @@ function setupSocket(io) {
       if (!socket.admin) return
       try {
         const sessionResult = await pool.query(
-          'SELECT id FROM sessions WHERE id = $1 AND created_by = $2', [sessionId, socket.admin.id])
-        if (!sessionResult.rows[0]) return
+          'SELECT * FROM sessions WHERE id = $1 AND created_by = $2', [sessionId, socket.admin.id])
+        const session = sessionResult.rows[0]
+        if (!session) return
         socket.join(`admin:${sessionId}`)
         const playersResult = await pool.query(
           `SELECT id, session_id, player_name, socket_id, joined_at, ac, max_hp, current_hp, conditions, is_concentrating
            FROM players WHERE session_id = $1 ORDER BY joined_at ASC`, [sessionId])
         socket.emit('players-snapshot', { sessionId, players: playersResult.rows })
+        socket.emit('admin-state', {
+          sessionId,
+          tvMode: session.tv_mode || 'lobby',
+          doomClock: serializeDoomClock(session),
+          tensionScale: serializeTensionScale(session),
+          activeVote: await getActiveVote(session.id, session.current_vote_id),
+          activeMerchant: (session.current_merchant_id && session.tv_mode === 'merchant')
+            ? await getMerchantData(session.current_merchant_id)
+            : null,
+        })
       } catch (err) { console.error(err) }
     })
 
@@ -202,22 +279,8 @@ function setupSocket(io) {
         const joinUrl = `${frontendUrl}/join/${session.code}`
         const qrCodeDataUrl = await QRCode.toDataURL(joinUrl)
 
-        let activeVote = null
-        if (session.current_vote_id) {
-          const voteInfo = await pool.query('SELECT * FROM votes WHERE id = $1 AND status = $2', [session.current_vote_id, 'active'])
-          if (voteInfo.rows[0]) {
-            const v = voteInfo.rows[0]
-            const options = typeof v.options === 'string' ? JSON.parse(v.options) : v.options
-            const responses = await pool.query('SELECT option_index, player_name FROM vote_responses WHERE vote_id = $1', [v.id])
-            const results = options.map((_, i) => responses.rows.filter(r => r.option_index === i).length)
-            const totalPlayers = await pool.query('SELECT COUNT(*)::int AS total FROM players WHERE session_id = $1', [session.id])
-            activeVote = {
-              id: v.id, question: v.question, options, isAnonymous: v.is_anonymous,
-              results, totalPlayers: totalPlayers.rows[0].total, totalVotes: responses.rows.length,
-              voterNames: responses.rows.map(r => ({ name: r.player_name, optionIndex: r.option_index }))
-            }
-          }
-        }
+        const activeVote = await getActiveVote(session.id, session.current_vote_id)
+        const doomClock = serializeDoomClock(session)
 
         socket.emit('tv-snapshot', {
           session: { id: session.id, name: session.name },
@@ -227,6 +290,8 @@ function setupSocket(io) {
           qrCodeDataUrl,
           currentImageUrl: session.current_image_url,
           activeVote,
+          doomClock,
+          tensionScale: serializeTensionScale(session),
           activeMerchant: (session.current_merchant_id && session.tv_mode === 'merchant')
             ? await getMerchantData(session.current_merchant_id)
             : null,
@@ -241,6 +306,123 @@ function setupSocket(io) {
         await pool.query('UPDATE sessions SET tv_mode = $1 WHERE id = $2 AND created_by = $3', [mode, sessionId, socket.admin.id])
         io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode })
         io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: start doom clock ──────────────────────────────────────────────
+    socket.on('start-doom-clock', async ({ sessionId, title, durationSeconds }) => {
+      if (!socket.admin) return
+      try {
+        const parsedDuration = parseInt(durationSeconds, 10)
+        if (Number.isNaN(parsedDuration)) {
+          socket.emit('tv-control-error', { message: 'Durée invalide (entre 5 secondes et 24 heures).' })
+          return
+        }
+        const safeDuration = Math.max(MIN_DOOM_DURATION_SECONDS, Math.min(MAX_DOOM_DURATION_SECONDS, parsedDuration))
+        const endAt = new Date(Date.now() + safeDuration * 1000)
+        const safeTitle = (title || 'DOOM CLOCK').trim().slice(0, MAX_TITLE_LENGTH) || 'DOOM CLOCK'
+        await pool.query(
+          `UPDATE sessions
+           SET doom_clock_title = $1, doom_clock_end_at = $2, tv_mode = 'doom'
+           WHERE id = $3 AND created_by = $4`,
+          [safeTitle, endAt, sessionId, socket.admin.id]
+        )
+        const payload = { title: safeTitle, endAt: endAt.toISOString() }
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'doom' })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'doom' })
+        io.to(`tv:${sessionId}`).emit('doom-clock-started', payload)
+        io.to(`admin:${sessionId}`).emit('doom-clock-started', payload)
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: stop doom clock ───────────────────────────────────────────────
+    socket.on('stop-doom-clock', async ({ sessionId }) => {
+      if (!socket.admin) return
+      try {
+        await pool.query(
+          `UPDATE sessions
+           SET doom_clock_title = NULL, doom_clock_end_at = NULL, tv_mode = 'lobby'
+           WHERE id = $1 AND created_by = $2`,
+          [sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('doom-clock-stopped')
+        io.to(`admin:${sessionId}`).emit('doom-clock-stopped')
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'lobby' })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'lobby' })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: create tension scale ──────────────────────────────────────────
+    socket.on('create-tension-scale', async ({ sessionId, title, steps, isDiscreet }) => {
+      if (!socket.admin) return
+      try {
+        const parsedSteps = parseInt(steps, 10)
+        if (Number.isNaN(parsedSteps)) {
+          socket.emit('tv-control-error', { message: "Nombre d'étapes invalide (entre 2 et 20)." })
+          return
+        }
+        const safeSteps = Math.max(MIN_TENSION_STEPS, Math.min(MAX_TENSION_STEPS, parsedSteps))
+        const safeTitle = (title || 'Échelle de tension').trim().slice(0, MAX_TITLE_LENGTH) || 'Échelle de tension'
+        const result = await pool.query(
+          `UPDATE sessions
+           SET tension_title = $1, tension_steps = $2, tension_level = 0, tension_discreet = $3, tv_mode = 'tension'
+           WHERE id = $4 AND created_by = $5
+           RETURNING tension_title, tension_steps, tension_level, tension_discreet`,
+          [safeTitle, safeSteps, !!isDiscreet, sessionId, socket.admin.id]
+        )
+        const row = result.rows[0]
+        if (!row) return
+        const payload = {
+          title: row.tension_title,
+          steps: row.tension_steps,
+          level: row.tension_level,
+          isDiscreet: row.tension_discreet,
+        }
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'tension' })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'tension' })
+        io.to(`tv:${sessionId}`).emit('tension-scale-updated', payload)
+        io.to(`admin:${sessionId}`).emit('tension-scale-updated', payload)
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: +1 tension scale ──────────────────────────────────────────────
+    socket.on('increment-tension-scale', async ({ sessionId }) => {
+      if (!socket.admin) return
+      try {
+        const result = await pool.query(
+          `UPDATE sessions
+           SET tension_level = LEAST(COALESCE(tension_steps, 0), COALESCE(tension_level, 0) + 1)
+           WHERE id = $1 AND created_by = $2 AND tension_title IS NOT NULL AND tension_steps IS NOT NULL
+           RETURNING tension_title, tension_steps, tension_level, tension_discreet`,
+          [sessionId, socket.admin.id]
+        )
+        const row = result.rows[0]
+        if (!row) return
+        const payload = {
+          title: row.tension_title,
+          steps: row.tension_steps,
+          level: row.tension_level,
+          isDiscreet: row.tension_discreet,
+        }
+        io.to(`tv:${sessionId}`).emit('tension-scale-updated', payload)
+        io.to(`admin:${sessionId}`).emit('tension-scale-updated', payload)
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: end tension scale ─────────────────────────────────────────────
+    socket.on('end-tension-scale', async ({ sessionId }) => {
+      if (!socket.admin) return
+      try {
+        await pool.query(
+          `UPDATE sessions
+           SET tension_title = NULL, tension_steps = NULL, tension_level = 0, tension_discreet = FALSE, tv_mode = 'lobby'
+           WHERE id = $1 AND created_by = $2`,
+          [sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('tension-scale-ended')
+        io.to(`admin:${sessionId}`).emit('tension-scale-ended')
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'lobby' })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'lobby' })
       } catch (err) { console.error(err) }
     })
 
@@ -654,6 +836,7 @@ function setupSocket(io) {
         )
         const player = pr.rows[0]
         if (!player) return
+        const normalizedName = normalizePlayerName(player.player_name)
         // Notify and clear real-time session state for the kicked player
         if (player.socket_id) {
           const playerSocket = io.sockets.sockets.get(player.socket_id)
@@ -666,8 +849,23 @@ function setupSocket(io) {
             io.to(player.socket_id).emit('kicked')
           }
         }
-        // Remove from DB
-        await pool.query('DELETE FROM players WHERE id = $1', [playerId])
+        const client = await pool.connect()
+        try {
+          await client.query('BEGIN')
+          await client.query(
+            `INSERT INTO kicked_players (session_id, normalized_player_name)
+             VALUES ($1, $2)
+             ON CONFLICT (session_id, normalized_player_name) DO UPDATE SET kicked_at = NOW()`,
+            [player.session_id, normalizedName]
+          )
+          await client.query('DELETE FROM players WHERE id = $1', [playerId])
+          await client.query('COMMIT')
+        } catch (dbErr) {
+          await client.query('ROLLBACK')
+          throw dbErr
+        } finally {
+          client.release()
+        }
         // Notify admin and TV
         io.to(`admin:${player.session_id}`).emit('player-left', { playerId })
         io.to(`tv:${player.session_id}`).emit('player-left', { playerId })
