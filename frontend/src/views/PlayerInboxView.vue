@@ -518,6 +518,7 @@ onUnmounted(() => {
               type="number"
               class="hp-input"
               :min="0"
+              :max="MAX_HP_LIMIT"
             />
             <button class="hp-btn plus" @click="adjustHp(1)">+1</button>
             <button class="hp-btn plus" @click="adjustHp(5)">+5</button>

@@ -12,8 +12,12 @@ const MAX_TENSION_STEPS = 20
 const MAX_TITLE_LENGTH = 200
 const TENSION_DIRECTIONS = new Set(['ascending', 'descending'])
 
+function sanitizePlayerName(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ')
+}
+
 function normalizePlayerName(name) {
-  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase()
+  return sanitizePlayerName(name).toLowerCase()
 }
 
 async function getMerchantData(merchantId) {
@@ -169,7 +173,7 @@ function setupSocket(io) {
     // ── Player: join ────────────────────────────────────────────────────────
     socket.on('join-session', async ({ code, playerName, ac, hp, dndClass, avatarUrl }) => {
       try {
-        const cleanName = String(playerName || '').trim().replace(/\s+/g, ' ')
+        const cleanName = sanitizePlayerName(playerName)
         if (!cleanName) {
           socket.emit('error', { message: 'Nom du personnage requis.' })
           return
@@ -184,16 +188,14 @@ function setupSocket(io) {
         const avatarVal = avatarUrl || null
 
         const normalizedName = normalizePlayerName(cleanName)
-        const existingPlayerRes = await pool.query(
+        const existingPlayersRes = await pool.query(
           `SELECT *
            FROM players
            WHERE session_id = $1
-             AND LOWER(REGEXP_REPLACE(TRIM(player_name), '\\s+', ' ', 'g')) = $2
-           ORDER BY joined_at ASC
-           LIMIT 1`,
-          [session.id, normalizedName]
+           ORDER BY joined_at ASC`,
+          [session.id]
         )
-        const existingPlayer = existingPlayerRes.rows[0]
+        const existingPlayer = existingPlayersRes.rows.find(p => normalizePlayerName(p.player_name) === normalizedName)
         let player
         if (existingPlayer) {
           if (existingPlayer.socket_id && existingPlayer.socket_id !== socket.id) {
