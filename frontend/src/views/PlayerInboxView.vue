@@ -15,6 +15,8 @@ const sessionName = ref(sessionStore.activeSession?.name || 'Session')
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 const INITIATIVE_MIN = -10
 const INITIATIVE_MAX = 99
+const TEMP_HP_COLOR = '#6aa6e0'
+const MAX_HP_LIMIT = 9999
 
 // ── Active tab ───────────────────────────────────────────────────────────
 // Tabs: 'combat' | 'outils' | 'boutique' | 'vote' | 'messages'
@@ -53,8 +55,17 @@ const initiativeValue = ref(
 const initiativeSending = ref(false)
 const initiativeSent = ref(false)
 
-const hpPercent = computed(() => Math.min(100, Math.max(0, (pendingHp.value / maxHp.value) * 100)))
+const pendingBaseHp = computed(() => Math.max(0, pendingHp.value))
+const hpPercent = computed(() => {
+  if (!maxHp.value) return 100
+  const displayedBaseHp = Math.min(maxHp.value, pendingBaseHp.value)
+  return Math.min(100, Math.max(0, (displayedBaseHp / maxHp.value) * 100))
+})
+const temporaryHp = computed(() => Math.max(0, pendingHp.value - maxHp.value))
+const confirmedTemporaryHp = computed(() => Math.max(0, currentHp.value - maxHp.value))
+const confirmedDisplayedHp = computed(() => Math.min(currentHp.value, maxHp.value))
 const hpBarColor = computed(() => {
+  if (temporaryHp.value > 0) return TEMP_HP_COLOR
   const pct = hpPercent.value
   if (pct > 50) return '#2fb896'
   if (pct > 20) return '#f0a500'
@@ -104,7 +115,7 @@ function toggleCondition(conditionId) {
 }
 
 function adjustHp(delta) {
-  pendingHp.value = Math.max(0, Math.min(maxHp.value, pendingHp.value + delta))
+  pendingHp.value = Math.max(0, Math.min(MAX_HP_LIMIT, pendingHp.value + delta))
 }
 
 function sendHpUpdate() {
@@ -494,7 +505,8 @@ onUnmounted(() => {
         <div class="panel hp-panel">
           <div class="panel-header">
             <span class="panel-label">❤️ Points de Vie</span>
-            <span class="hp-fraction">{{ currentHp }} / {{ maxHp }}</span>
+            <span class="hp-fraction">{{ confirmedDisplayedHp }} / {{ maxHp }}</span>
+            <span v-if="confirmedTemporaryHp > 0" class="hp-temp">+{{ confirmedTemporaryHp }} TEMP</span>
           </div>
           <div class="hp-bar-track">
             <div class="hp-bar-fill" :style="{ width: hpPercent + '%', background: hpBarColor }" />
@@ -506,7 +518,8 @@ onUnmounted(() => {
               v-model.number="pendingHp"
               type="number"
               class="hp-input"
-              :min="0" :max="maxHp"
+              :min="0"
+              :max="MAX_HP_LIMIT"
             />
             <button class="hp-btn plus" @click="adjustHp(1)">+1</button>
             <button class="hp-btn plus" @click="adjustHp(5)">+5</button>
@@ -890,6 +903,13 @@ onUnmounted(() => {
   font-size: 0.85rem;
   color: var(--color-parchment);
   letter-spacing: 0.05em;
+}
+.hp-temp {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  color: #9ed3ff;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .hp-bar-track { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
 .hp-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease, background 0.4s ease; }
