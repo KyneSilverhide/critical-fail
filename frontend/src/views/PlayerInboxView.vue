@@ -13,6 +13,8 @@ const unreadMessages = ref(0)
 const playerInfo = ref(sessionStore.playerInfo || { name: 'Aventurier', hp: 20, maxHp: 20, ac: 10 })
 const sessionName = ref(sessionStore.activeSession?.name || 'Session')
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const INITIATIVE_MIN = -10
+const INITIATIVE_MAX = 99
 
 // ── Active tab ───────────────────────────────────────────────────────────
 // Tabs: 'combat' | 'outils' | 'boutique' | 'vote' | 'messages'
@@ -42,9 +44,10 @@ const hpSending = ref(false)
 const hpSent = ref(false)
 
 // ── Initiative ─────────────────────────────────────────────────────────────
+const initialInitiative = parseInt(playerInfo.value?.initiative, 10)
 const initiativeValue = ref(
-  Number.isFinite(parseInt(playerInfo.value?.initiative))
-    ? parseInt(playerInfo.value?.initiative)
+  Number.isFinite(initialInitiative)
+    ? Math.max(INITIATIVE_MIN, Math.min(INITIATIVE_MAX, initialInitiative))
     : null
 )
 const initiativeSending = ref(false)
@@ -113,7 +116,11 @@ function sendHpUpdate() {
 function sendInitiativeUpdate() {
   const socket = getSocket()
   initiativeSending.value = true
-  socket.emit('update-initiative', { initiative: initiativeValue.value })
+  const parsed = parseInt(initiativeValue.value, 10)
+  const initiative = Number.isFinite(parsed)
+    ? Math.max(INITIATIVE_MIN, Math.min(INITIATIVE_MAX, parsed))
+    : null
+  socket.emit('update-initiative', { initiative })
 }
 
 function leaveSession() {
@@ -524,8 +531,8 @@ onUnmounted(() => {
               v-model.number="initiativeValue"
               type="number"
               class="initiative-input"
-              min="-10"
-              max="99"
+              :min="INITIATIVE_MIN"
+              :max="INITIATIVE_MAX"
               placeholder="Ex: 14"
             />
             <button

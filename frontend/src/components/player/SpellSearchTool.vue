@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
@@ -10,6 +10,13 @@ const searched = ref(false)
 const searchCache = new Map()
 const MIN_AUTO_SEARCH_LENGTH = 3
 let autoSearchTimer = null
+
+const enrichedResults = computed(() =>
+  results.value.map(spell => ({
+    ...spell,
+    parsedEcole: parseEcole(spell.attributes?.ecole),
+  }))
+)
 
 function parseEcole(ecole) {
   if (!ecole) return { level: null, school: '', ritual: false }
@@ -103,14 +110,14 @@ onUnmounted(() => {
     </p>
 
     <div class="spell-list">
-      <article v-for="spell in results" :key="spell.slug" class="spell-card">
+      <article v-for="spell in enrichedResults" :key="spell.slug" class="spell-card">
         <div class="spell-head">
           <h4 class="spell-name">{{ spell.name }}</h4>
-          <span class="spell-level">{{ levelLabel(parseEcole(spell.attributes?.ecole).level) }}</span>
+          <span class="spell-level">{{ levelLabel(spell.parsedEcole.level) }}</span>
         </div>
         <p class="spell-school">
-          {{ parseEcole(spell.attributes?.ecole).school }}
-          <span v-if="parseEcole(spell.attributes?.ecole).ritual"> • Rituel</span>
+          {{ spell.parsedEcole.school }}
+          <span v-if="spell.parsedEcole.ritual"> • Rituel</span>
         </p>
         <p v-if="spell.attributes?.temps_incantation" class="spell-meta">
           ⏱️ {{ spell.attributes.temps_incantation.replace(/^Temps d'incantation\s*:\s*/i, '') }}

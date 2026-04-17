@@ -6,6 +6,7 @@ const notesText = ref('')
 const drawColor = ref('#f3e7c2')
 const drawLineWidth = ref(2)
 const drawEnabled = ref(true)
+const CANVAS_DIMENSION_FALLBACK = 1
 
 const canvasRef = ref(null)
 let ctx = null
@@ -49,8 +50,8 @@ function resizeCanvas() {
   const canvas = canvasRef.value
   if (!canvas) return
   const previous = document.createElement('canvas')
-  previous.width = canvas.width || 1
-  previous.height = canvas.height || 1
+  previous.width = Math.max(CANVAS_DIMENSION_FALLBACK, canvas.width)
+  previous.height = Math.max(CANVAS_DIMENSION_FALLBACK, canvas.height)
   const previousCtx = previous.getContext('2d')
   previousCtx.drawImage(canvas, 0, 0)
 

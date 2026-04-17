@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken')
 const QRCode = require('qrcode')
 const crypto = require('crypto')
 const pool = require('./db')
+const INITIATIVE_MIN = -10
+const INITIATIVE_MAX = 99
 
 async function getMerchantData(merchantId) {
   const mr = await pool.query('SELECT * FROM merchants WHERE id = $1', [merchantId])
@@ -174,8 +176,8 @@ function setupSocket(io) {
     socket.on('update-initiative', async ({ initiative }) => {
       if (!socket.playerId || !socket.sessionId) return
       try {
-        const parsed = parseInt(initiative)
-        const value = Number.isFinite(parsed) ? Math.max(-10, Math.min(99, parsed)) : null
+        const parsed = parseInt(initiative, 10)
+        const value = Number.isFinite(parsed) ? Math.max(INITIATIVE_MIN, Math.min(INITIATIVE_MAX, parsed)) : null
         await pool.query('UPDATE players SET initiative = $1 WHERE id = $2', [value, socket.playerId])
         const event = { playerId: socket.playerId, initiative: value }
         io.to(`admin:${socket.sessionId}`).emit('initiative-updated', event)
