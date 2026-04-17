@@ -3,6 +3,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
 
+const DOOM_DANGER_THRESHOLD_SECONDS = 10
+const TENSION_COLOR_MEDIUM_THRESHOLD = 0.33
+const TENSION_COLOR_HIGH_THRESHOLD = 0.66
+const TENSION_SHAKE_MEDIUM_THRESHOLD = 0.4
+const TENSION_SHAKE_HARD_THRESHOLD = 0.75
+
 const route = useRoute()
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
@@ -105,15 +111,15 @@ const tensionProgress = computed(() => {
 
 const tensionColor = computed(() => {
   const p = tensionProgress.value
-  if (p < 0.33) return '#2fb896'
-  if (p < 0.66) return '#f0a500'
+  if (p < TENSION_COLOR_MEDIUM_THRESHOLD) return '#2fb896'
+  if (p < TENSION_COLOR_HIGH_THRESHOLD) return '#f0a500'
   return '#e03030'
 })
 
 const tensionShakeClass = computed(() => {
   if (!activeTensionScale.value) return ''
-  if (tensionProgress.value < 0.4) return 'shake-soft'
-  if (tensionProgress.value < 0.75) return 'shake-medium'
+  if (tensionProgress.value < TENSION_SHAKE_MEDIUM_THRESHOLD) return 'shake-soft'
+  if (tensionProgress.value < TENSION_SHAKE_HARD_THRESHOLD) return 'shake-medium'
   return 'shake-hard'
 })
 
@@ -383,7 +389,7 @@ onUnmounted(() => {
       <!-- Doom clock mode -->
       <div v-else-if="tvMode === 'doom'" class="doom-display">
         <h2 class="doom-title">{{ activeDoomClock?.title || 'DOOM CLOCK' }}</h2>
-        <div class="doom-timer" :class="{ danger: doomRemaining <= 10 }">{{ doomRemainingLabel }}</div>
+        <div class="doom-timer" :class="{ danger: doomRemaining <= DOOM_DANGER_THRESHOLD_SECONDS }">{{ doomRemainingLabel }}</div>
       </div>
 
       <!-- Tension mode -->
