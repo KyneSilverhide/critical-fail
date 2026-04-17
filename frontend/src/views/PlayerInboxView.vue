@@ -16,6 +16,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 const INITIATIVE_MIN = -10
 const INITIATIVE_MAX = 99
 const TEMP_HP_COLOR = '#6aa6e0'
+const MAX_HP_LIMIT = 9999
 
 // ── Active tab ───────────────────────────────────────────────────────────
 // Tabs: 'combat' | 'outils' | 'boutique' | 'vote' | 'messages'
@@ -113,7 +114,7 @@ function toggleCondition(conditionId) {
 }
 
 function adjustHp(delta) {
-  pendingHp.value = Math.max(0, Math.min(9999, pendingHp.value + delta))
+  pendingHp.value = Math.max(0, Math.min(MAX_HP_LIMIT, pendingHp.value + delta))
 }
 
 function sendHpUpdate() {
