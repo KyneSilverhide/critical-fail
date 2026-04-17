@@ -120,7 +120,7 @@ const tensionShakeClass = computed(() => {
 let socket = null
 
 onMounted(() => {
-  clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 250)
+  clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 1000)
   socket = io(BACKEND_URL)
 
   socket.on('connect', () => {

@@ -100,7 +100,7 @@ function handleTensionScaleEnded() {
 }
 
 onMounted(() => {
-  clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 250)
+  clockTickInterval = window.setInterval(() => { now.value = Date.now() }, 1000)
   const socket = getSocket()
   socket.on('tv-mode-changed', handleModeChanged)
   socket.on('admin-state', handleAdminState)

@@ -3,6 +3,11 @@ const QRCode = require('qrcode')
 const crypto = require('crypto')
 const pool = require('./db')
 
+const MAX_DOOM_DURATION_SECONDS = 24 * 60 * 60
+const MIN_TENSION_STEPS = 2
+const MAX_TENSION_STEPS = 20
+const DEFAULT_TENSION_STEPS = 5
+
 async function getMerchantData(merchantId) {
   const mr = await pool.query('SELECT * FROM merchants WHERE id = $1', [merchantId])
   const merchant = mr.rows[0]
@@ -309,7 +314,7 @@ function setupSocket(io) {
     socket.on('start-doom-clock', async ({ sessionId, title, durationSeconds }) => {
       if (!socket.admin) return
       try {
-        const safeDuration = Math.max(5, Math.min(24 * 60 * 60, parseInt(durationSeconds) || 60))
+        const safeDuration = Math.max(5, Math.min(MAX_DOOM_DURATION_SECONDS, parseInt(durationSeconds) || 60))
         const endAt = new Date(Date.now() + safeDuration * 1000)
         const safeTitle = (title || 'DOOM CLOCK').trim().slice(0, 200) || 'DOOM CLOCK'
         await pool.query(
@@ -347,7 +352,7 @@ function setupSocket(io) {
     socket.on('create-tension-scale', async ({ sessionId, title, steps, isDiscreet }) => {
       if (!socket.admin) return
       try {
-        const safeSteps = Math.max(2, Math.min(20, parseInt(steps) || 5))
+        const safeSteps = Math.max(MIN_TENSION_STEPS, Math.min(MAX_TENSION_STEPS, parseInt(steps) || DEFAULT_TENSION_STEPS))
         const safeTitle = (title || 'Échelle de tension').trim().slice(0, 200) || 'Échelle de tension'
         const result = await pool.query(
           `UPDATE sessions
