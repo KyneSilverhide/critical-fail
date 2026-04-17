@@ -26,9 +26,7 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - backend
-    environment:
-      VITE_BACKEND_URL: ${VITE_BACKEND_URL}
+      - dmtoolkit-backend
 volumes:
   pgdata:
   uploads:
