@@ -63,6 +63,7 @@ function kickPlayer(player) {
           <span class="player-icon">⚔️</span>
           <span class="player-name">{{ player.player_name }}</span>
           <span v-if="player.is_concentrating" class="concentration-icon" title="Concentration">🎯</span>
+          <span class="initiative-badge">🎲 {{ player.initiative ?? '—' }}</span>
           <span class="ac-badge">🛡️ {{ player.ac ?? '?' }}</span>
           <span class="hp-text" :style="{ color: hpColor(player) }">
             ❤️ {{ player.current_hp ?? '?' }}<span class="hp-max">/ {{ player.max_hp ?? '?' }}</span>
@@ -114,6 +115,11 @@ function kickPlayer(player) {
 .ac-badge {
   font-family: var(--font-heading); font-size: 0.65rem; letter-spacing: 0.05em;
   color: var(--color-gold-bright); background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.35);
+  border-radius: 20px; padding: 0.1rem 0.45rem;
+}
+.initiative-badge {
+  font-family: var(--font-heading); font-size: 0.65rem; letter-spacing: 0.05em;
+  color: #9ed3ff; background: rgba(100,150,220,0.12); border: 1px solid rgba(100,150,220,0.45);
   border-radius: 20px; padding: 0.1rem 0.45rem;
 }
 .hp-text {

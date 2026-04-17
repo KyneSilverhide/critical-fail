@@ -77,7 +77,7 @@ function setupSocket(io) {
 
         socket.emit('session-joined', {
           session: { id: session.id, name: session.name, code: session.code },
-          player: { id: player.id, player_name: player.player_name, ac: player.ac, max_hp: player.max_hp, current_hp: player.current_hp, dnd_class: player.dnd_class, avatar_url: player.avatar_url },
+          player: { id: player.id, player_name: player.player_name, ac: player.ac, max_hp: player.max_hp, current_hp: player.current_hp, dnd_class: player.dnd_class, avatar_url: player.avatar_url, initiative: player.initiative },
           activeMerchant: (session.current_merchant_id && session.tv_mode === 'merchant')
             ? await getMerchantData(session.current_merchant_id)
             : null,
@@ -170,6 +170,20 @@ function setupSocket(io) {
       } catch (err) { console.error(err) }
     })
 
+    // ── Player: update initiative ────────────────────────────────────────────
+    socket.on('update-initiative', async ({ initiative }) => {
+      if (!socket.playerId || !socket.sessionId) return
+      try {
+        const parsed = parseInt(initiative)
+        const value = Number.isFinite(parsed) ? Math.max(-10, Math.min(99, parsed)) : null
+        await pool.query('UPDATE players SET initiative = $1 WHERE id = $2', [value, socket.playerId])
+        const event = { playerId: socket.playerId, initiative: value }
+        io.to(`admin:${socket.sessionId}`).emit('initiative-updated', event)
+        io.to(`tv:${socket.sessionId}`).emit('initiative-updated', event)
+        socket.emit('initiative-confirmed', { initiative: value })
+      } catch (err) { console.error(err) }
+    })
+
     // ── Admin: join room + snapshot ─────────────────────────────────────────
     socket.on('admin-join', async (sessionId) => {
       if (!socket.admin) return
@@ -179,7 +193,7 @@ function setupSocket(io) {
         if (!sessionResult.rows[0]) return
         socket.join(`admin:${sessionId}`)
         const playersResult = await pool.query(
-          `SELECT id, session_id, player_name, socket_id, joined_at, ac, max_hp, current_hp, conditions, is_concentrating
+          `SELECT id, session_id, player_name, socket_id, joined_at, ac, max_hp, current_hp, conditions, is_concentrating, initiative
            FROM players WHERE session_id = $1 ORDER BY joined_at ASC`, [sessionId])
         socket.emit('players-snapshot', { sessionId, players: playersResult.rows })
       } catch (err) { console.error(err) }
@@ -195,7 +209,7 @@ function setupSocket(io) {
         socket.join(`tv:${session.id}`)
         socket.tvSessionId = session.id
         const playersResult = await pool.query(
-          `SELECT id, player_name, ac, max_hp, current_hp, dnd_class, avatar_url, conditions, is_concentrating
+          `SELECT id, player_name, joined_at, ac, max_hp, current_hp, dnd_class, avatar_url, conditions, is_concentrating, initiative
            FROM players WHERE session_id = $1 ORDER BY joined_at ASC`, [session.id])
 
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'

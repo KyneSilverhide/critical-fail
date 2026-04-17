@@ -45,6 +45,11 @@ export const sessionStore = reactive({
     if (idx !== -1) this.players[idx] = { ...this.players[idx], is_concentrating: isConcentrating }
   },
 
+  updatePlayerInitiative(playerId, initiative) {
+    const idx = this.players.findIndex(p => String(p.id) === String(playerId))
+    if (idx !== -1) this.players[idx] = { ...this.players[idx], initiative }
+  },
+
   addMessage(msg) {
     this.messages.push(msg)
   },

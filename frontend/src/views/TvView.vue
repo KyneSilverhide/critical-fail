@@ -174,6 +174,13 @@ onMounted(() => {
     }
   })
 
+  socket.on('initiative-updated', ({ playerId, initiative }) => {
+    const idx = players.value.findIndex(p => String(p.id) === String(playerId))
+    if (idx !== -1) {
+      players.value[idx] = { ...players.value[idx], initiative }
+    }
+  })
+
   socket.on('error', ({ message }) => {
     connectionError.value = message
   })
@@ -248,6 +255,8 @@ onUnmounted(() => {
                 <span class="card-name">{{ player.player_name }}</span>
                 <span v-if="player.dnd_class" class="class-badge">{{ player.dnd_class }}</span>
               </div>
+
+              <div class="initiative-badge">🎲 {{ player.initiative ?? '—' }}</div>
 
               <div class="ac-shield">
                 <span class="ac-icon">🛡️</span>
@@ -610,6 +619,18 @@ onUnmounted(() => {
   border-radius: 20px;
   padding: 0.1rem 0.45rem;
   width: fit-content;
+}
+
+.initiative-badge {
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: #9ed3ff;
+  background: rgba(100,150,220,0.14);
+  border: 1px solid rgba(100,150,220,0.45);
+  border-radius: 20px;
+  padding: 0.2rem 0.5rem;
+  white-space: nowrap;
 }
 
 .ac-shield {

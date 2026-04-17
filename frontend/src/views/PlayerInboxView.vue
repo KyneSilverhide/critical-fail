@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { getSocket, resetSocket } from '../socket.js'
 import { sessionStore } from '../stores/session.js'
 import MessageCard from '../components/player/MessageCard.vue'
+import SpellSearchTool from '../components/player/SpellSearchTool.vue'
+import PlayerNotesTool from '../components/player/PlayerNotesTool.vue'
 
 const router = useRouter()
 const messages = ref([])
@@ -13,7 +15,7 @@ const sessionName = ref(sessionStore.activeSession?.name || 'Session')
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 // ── Active tab ───────────────────────────────────────────────────────────
-// Tabs: 'combat' | 'boutique' | 'vote' | 'messages'
+// Tabs: 'combat' | 'outils' | 'boutique' | 'vote' | 'messages'
 const activeTab = ref('combat')
 let hasRequestedNotificationPermission = false
 
@@ -38,6 +40,15 @@ const maxHp = ref(playerInfo.value?.maxHp ?? 20)
 const pendingHp = ref(currentHp.value)
 const hpSending = ref(false)
 const hpSent = ref(false)
+
+// ── Initiative ─────────────────────────────────────────────────────────────
+const initiativeValue = ref(
+  Number.isFinite(parseInt(playerInfo.value?.initiative))
+    ? parseInt(playerInfo.value?.initiative)
+    : null
+)
+const initiativeSending = ref(false)
+const initiativeSent = ref(false)
 
 const hpPercent = computed(() => Math.min(100, Math.max(0, (pendingHp.value / maxHp.value) * 100)))
 const hpBarColor = computed(() => {
@@ -97,6 +108,12 @@ function sendHpUpdate() {
   const socket = getSocket()
   hpSending.value = true
   socket.emit('update-hp', { newHp: pendingHp.value })
+}
+
+function sendInitiativeUpdate() {
+  const socket = getSocket()
+  initiativeSending.value = true
+  socket.emit('update-initiative', { initiative: initiativeValue.value })
 }
 
 function leaveSession() {
@@ -252,6 +269,13 @@ const handleHpConfirmed = (data) => {
 const handleConcentrationConfirmed = (data) => {
   isConcentrating.value = data.isConcentrating
 }
+const handleInitiativeConfirmed = (data) => {
+  initiativeValue.value = data.initiative
+  if (sessionStore.playerInfo) sessionStore.playerInfo.initiative = data.initiative
+  initiativeSending.value = false
+  initiativeSent.value = true
+  setTimeout(() => { initiativeSent.value = false }, 2000)
+}
 const handleConcentrationWarning = (data) => {
   concentrationModal.value = data
 }
@@ -333,6 +357,7 @@ onMounted(() => {
   socket.on('dice-result', handleDiceResult)
   socket.on('hp-update-confirmed', handleHpConfirmed)
   socket.on('concentration-confirmed', handleConcentrationConfirmed)
+  socket.on('initiative-confirmed', handleInitiativeConfirmed)
   socket.on('concentration-warning', handleConcentrationWarning)
   socket.on('vote-started', handleVoteStarted)
   socket.on('vote-closed', handleVoteClosed)
@@ -358,6 +383,7 @@ onUnmounted(() => {
     socket.off('dice-result', handleDiceResult)
     socket.off('hp-update-confirmed', handleHpConfirmed)
     socket.off('concentration-confirmed', handleConcentrationConfirmed)
+    socket.off('initiative-confirmed', handleInitiativeConfirmed)
     socket.off('concentration-warning', handleConcentrationWarning)
     socket.off('vote-started', handleVoteStarted)
     socket.off('vote-closed', handleVoteClosed)
@@ -488,6 +514,31 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <!-- Initiative -->
+        <div class="panel initiative-panel">
+          <div class="panel-header">
+            <span class="panel-label">🎲 Initiative</span>
+          </div>
+          <div class="initiative-controls">
+            <input
+              v-model.number="initiativeValue"
+              type="number"
+              class="initiative-input"
+              min="-10"
+              max="99"
+              placeholder="Ex: 14"
+            />
+            <button
+              class="initiative-send-btn"
+              :class="{ sent: initiativeSent }"
+              :disabled="initiativeSending"
+              @click="sendInitiativeUpdate"
+            >
+              {{ initiativeSent ? '✓ Envoyée' : initiativeSending ? '…' : '📡 Envoyer' }}
+            </button>
+          </div>
+        </div>
+
         <!-- Concentration -->
         <div class="panel">
           <button
@@ -536,6 +587,18 @@ onUnmounted(() => {
               <span class="cond-label">{{ cond.label }}</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- ── OUTILS tab (Notes + Sorts) ───────────────────────────────── -->
+      <div v-show="activeTab === 'outils'" class="tab-panel">
+        <div class="panel">
+          <p class="panel-label">📝 Notes</p>
+          <PlayerNotesTool />
+        </div>
+        <div class="panel">
+          <p class="panel-label">🔍 Recherche de sorts</p>
+          <SpellSearchTool />
         </div>
       </div>
 
@@ -654,6 +717,14 @@ onUnmounted(() => {
         <span class="tab-icon" :class="{ 'tab-icon-notify': activeConditions.length > 0 }">⚔️</span>
         <span class="tab-label">Combat</span>
         <span v-if="activeConditions.length > 0" class="tab-badge tab-badge-urgent">{{ activeConditions.length }}</span>
+      </button>
+      <button
+        class="tab-item"
+        :class="{ active: activeTab === 'outils' }"
+        @click="switchTab('outils')"
+      >
+        <span class="tab-icon">🛠️</span>
+        <span class="tab-label">Outils</span>
       </button>
       <button
         class="tab-item"
@@ -865,6 +936,39 @@ onUnmounted(() => {
 .hp-send-btn:hover:not(:disabled) { background: rgba(180,120,20,0.3); }
 .hp-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .hp-send-btn.sent { border-color: #2fb896; background: rgba(47,184,150,0.15); color: #2fb896; }
+
+/* ── Initiative ──────────────────────────────────────────────────────── */
+.initiative-panel { display: flex; flex-direction: column; gap: 0.5rem; }
+.initiative-controls { display: flex; align-items: center; gap: 0.5rem; }
+.initiative-input {
+  flex: 1;
+  height: 40px;
+  text-align: center;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-parchment);
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 700;
+  outline: none;
+}
+.initiative-input:focus { border-color: #6aa6e0; }
+.initiative-send-btn {
+  border: 1px solid #6aa6e0;
+  border-radius: 8px;
+  background: rgba(100,150,220,0.14);
+  color: #9ed3ff;
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.initiative-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.initiative-send-btn.sent { border-color: #2fb896; color: #2fb896; background: rgba(47,184,150,0.15); }
 
 /* ── Concentration ───────────────────────────────────────────────────── */
 .concentration-btn {
