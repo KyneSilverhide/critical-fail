@@ -175,7 +175,7 @@ function setupSocket(io) {
       try {
         const cleanName = sanitizePlayerName(playerName)
         if (!cleanName) {
-          socket.emit('error', { message: 'Nom du personnage requis.' })
+          socket.emit('error', { message: 'Le nom du personnage ne peut pas être vide.' })
           return
         }
         const sessionResult = await pool.query(

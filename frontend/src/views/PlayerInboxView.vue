@@ -55,9 +55,10 @@ const initiativeValue = ref(
 const initiativeSending = ref(false)
 const initiativeSent = ref(false)
 
+const pendingBaseHp = computed(() => Math.max(0, pendingHp.value))
 const hpPercent = computed(() => {
   if (!maxHp.value) return 100
-  const displayedBaseHp = Math.min(maxHp.value, Math.max(0, pendingHp.value))
+  const displayedBaseHp = Math.min(maxHp.value, pendingBaseHp.value)
   return Math.min(100, Math.max(0, (displayedBaseHp / maxHp.value) * 100))
 })
 const temporaryHp = computed(() => Math.max(0, pendingHp.value - maxHp.value))
