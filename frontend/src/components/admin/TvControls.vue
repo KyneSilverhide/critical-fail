@@ -13,7 +13,8 @@ const now = ref(Date.now())
 const activeTensionScale = ref(null)
 const tensionTitle = ref('Échelle de tension')
 const tensionSteps = ref(6)
-const tensionDiscreet = ref(false)
+const tensionDirection = ref('ascending')
+const tensionVibration = ref(false)
 let clockTickInterval = null
 
 function setMode(mode) {
@@ -43,7 +44,8 @@ function createTensionScale() {
     sessionId: sessionStore.activeSession.id,
     title: tensionTitle.value,
     steps: tensionSteps.value,
-    isDiscreet: tensionDiscreet.value,
+    direction: tensionDirection.value,
+    vibrationEnabled: tensionVibration.value,
   })
 }
 
@@ -70,7 +72,16 @@ const doomRemainingLabel = computed(() => {
 
 const tensionRatio = computed(() => {
   if (!activeTensionScale.value?.steps) return 0
-  return Math.round((activeTensionScale.value.level / activeTensionScale.value.steps) * 100)
+  const direction = activeTensionScale.value.direction || 'ascending'
+  const progress = direction === 'descending'
+    ? (activeTensionScale.value.steps - activeTensionScale.value.level) / activeTensionScale.value.steps
+    : activeTensionScale.value.level / activeTensionScale.value.steps
+  return Math.round(Math.max(0, Math.min(1, progress)) * 100)
+})
+
+const tensionAdvanceLabel = computed(() => {
+  const direction = activeTensionScale.value?.direction || tensionDirection.value
+  return direction === 'descending' ? '-1' : '+1'
 })
 
 function handleModeChanged({ mode }) {
@@ -82,6 +93,10 @@ function handleAdminState(data) {
   tvMode.value = data.tvMode || 'lobby'
   activeDoomClock.value = data.doomClock || null
   activeTensionScale.value = data.tensionScale || null
+  if (data.tensionScale) {
+    tensionDirection.value = data.tensionScale.direction || 'ascending'
+    tensionVibration.value = !!data.tensionScale.vibrationEnabled
+  }
 }
 
 function handleDoomClockStarted(data) {
@@ -94,6 +109,8 @@ function handleDoomClockStopped() {
 
 function handleTensionScaleUpdated(data) {
   activeTensionScale.value = data
+  tensionDirection.value = data.direction || 'ascending'
+  tensionVibration.value = !!data.vibrationEnabled
 }
 
 function handleTensionScaleEnded() {
@@ -171,11 +188,17 @@ onUnmounted(() => {
       </div>
       <div class="form-row split">
         <input v-model.number="tensionSteps" class="form-input" type="number" min="2" max="20" placeholder="Étapes" />
-        <label class="checkbox-label"><input v-model="tensionDiscreet" type="checkbox" /> Mode discret</label>
+        <select v-model="tensionDirection" class="form-input">
+          <option value="ascending">Croissant</option>
+          <option value="descending">Décroissant</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="checkbox-label"><input v-model="tensionVibration" type="checkbox" /> Vibration</label>
       </div>
       <div class="inline-actions">
         <button class="action-btn" @click="createTensionScale">Créer</button>
-        <button class="action-btn" :disabled="!activeTensionScale" @click="incrementTensionScale">+1</button>
+        <button class="action-btn" :disabled="!activeTensionScale" @click="incrementTensionScale">{{ tensionAdvanceLabel }}</button>
         <button class="action-btn danger-btn" :disabled="!activeTensionScale" @click="endTensionScale">Terminer</button>
       </div>
       <p v-if="activeTensionScale" class="status-line">

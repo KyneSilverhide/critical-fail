@@ -10,6 +10,7 @@ const MAX_DOOM_DURATION_SECONDS = 24 * 60 * 60
 const MIN_TENSION_STEPS = 2
 const MAX_TENSION_STEPS = 20
 const MAX_TITLE_LENGTH = 200
+const TENSION_DIRECTIONS = new Set(['ascending', 'descending'])
 
 async function getMerchantData(merchantId) {
   const mr = await pool.query('SELECT * FROM merchants WHERE id = $1', [merchantId])
@@ -20,15 +21,6 @@ async function getMerchantData(merchantId) {
     [merchantId]
   )
   return { ...merchant, items: items.rows }
-}
-
-// Normalize player names for case-insensitive and accent-insensitive kick matching.
-function normalizePlayerName(name) {
-  return String(name || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
 }
 
 function serializeDoomClock(session) {
@@ -44,11 +36,13 @@ function serializeDoomClock(session) {
 function serializeTensionScale(session) {
   const steps = parseInt(session?.tension_steps) || 0
   if (!session?.tension_title || steps <= 0) return null
+  const direction = TENSION_DIRECTIONS.has(session.tension_direction) ? session.tension_direction : 'ascending'
   return {
     title: session.tension_title,
     steps,
     level: Math.max(0, Math.min(steps, parseInt(session.tension_level) || 0)),
-    isDiscreet: !!session.tension_discreet,
+    direction,
+    vibrationEnabled: !!session.tension_vibration,
   }
 }
 
@@ -118,16 +112,6 @@ function setupSocket(io) {
           "SELECT * FROM sessions WHERE code = $1 AND status = 'active'", [code])
         const session = sessionResult.rows[0]
         if (!session) { socket.emit('error', { message: 'Session not found or closed.' }); return }
-        const normalizedName = normalizePlayerName(playerName)
-        const kicked = await pool.query(
-          'SELECT id FROM kicked_players WHERE session_id = $1 AND normalized_player_name = $2',
-          [session.id, normalizedName]
-        )
-        if (kicked.rows[0]) {
-          socket.emit('error', { message: 'Vous avez été expulsé de cette session.' })
-          return
-        }
-
         const acVal = Math.max(1, parseInt(ac) || 10)
         const hpVal = Math.max(1, parseInt(hp) || 20)
         const classVal = dndClass || null
@@ -369,7 +353,7 @@ function setupSocket(io) {
     })
 
     // ── Admin: create tension scale ──────────────────────────────────────────
-    socket.on('create-tension-scale', async ({ sessionId, title, steps, isDiscreet }) => {
+    socket.on('create-tension-scale', async ({ sessionId, title, steps, direction, vibrationEnabled }) => {
       if (!socket.admin) return
       try {
         const parsedSteps = parseInt(steps, 10)
@@ -379,12 +363,14 @@ function setupSocket(io) {
         }
         const safeSteps = Math.max(MIN_TENSION_STEPS, Math.min(MAX_TENSION_STEPS, parsedSteps))
         const safeTitle = (title || 'Échelle de tension').trim().slice(0, MAX_TITLE_LENGTH) || 'Échelle de tension'
+        const safeDirection = TENSION_DIRECTIONS.has(direction) ? direction : 'ascending'
+        const startLevel = safeDirection === 'descending' ? safeSteps : 0
         const result = await pool.query(
           `UPDATE sessions
-           SET tension_title = $1, tension_steps = $2, tension_level = 0, tension_discreet = $3, tv_mode = 'tension'
-           WHERE id = $4 AND created_by = $5
-           RETURNING tension_title, tension_steps, tension_level, tension_discreet`,
-          [safeTitle, safeSteps, !!isDiscreet, sessionId, socket.admin.id]
+           SET tension_title = $1, tension_steps = $2, tension_level = $3, tension_direction = $4, tension_vibration = $5, tv_mode = 'tension'
+           WHERE id = $6 AND created_by = $7
+           RETURNING tension_title, tension_steps, tension_level, tension_direction, tension_vibration`,
+          [safeTitle, safeSteps, startLevel, safeDirection, !!vibrationEnabled, sessionId, socket.admin.id]
         )
         const row = result.rows[0]
         if (!row) return
@@ -392,7 +378,8 @@ function setupSocket(io) {
           title: row.tension_title,
           steps: row.tension_steps,
           level: row.tension_level,
-          isDiscreet: row.tension_discreet,
+          direction: row.tension_direction,
+          vibrationEnabled: row.tension_vibration,
         }
         io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'tension' })
         io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'tension' })
@@ -401,15 +388,18 @@ function setupSocket(io) {
       } catch (err) { console.error(err) }
     })
 
-    // ── Admin: +1 tension scale ──────────────────────────────────────────────
+    // ── Admin: advance tension scale (up/down) ──────────────────────────────
     socket.on('increment-tension-scale', async ({ sessionId }) => {
       if (!socket.admin) return
       try {
         const result = await pool.query(
           `UPDATE sessions
-           SET tension_level = LEAST(COALESCE(tension_steps, 0), COALESCE(tension_level, 0) + 1)
+           SET tension_level = CASE
+             WHEN tension_direction = 'descending' THEN GREATEST(0, COALESCE(tension_level, 0) - 1)
+             ELSE LEAST(COALESCE(tension_steps, 0), COALESCE(tension_level, 0) + 1)
+           END
            WHERE id = $1 AND created_by = $2 AND tension_title IS NOT NULL AND tension_steps IS NOT NULL
-           RETURNING tension_title, tension_steps, tension_level, tension_discreet`,
+           RETURNING tension_title, tension_steps, tension_level, tension_direction, tension_vibration`,
           [sessionId, socket.admin.id]
         )
         const row = result.rows[0]
@@ -418,7 +408,8 @@ function setupSocket(io) {
           title: row.tension_title,
           steps: row.tension_steps,
           level: row.tension_level,
-          isDiscreet: row.tension_discreet,
+          direction: row.tension_direction,
+          vibrationEnabled: row.tension_vibration,
         }
         io.to(`tv:${sessionId}`).emit('tension-scale-updated', payload)
         io.to(`admin:${sessionId}`).emit('tension-scale-updated', payload)
@@ -431,7 +422,7 @@ function setupSocket(io) {
       try {
         await pool.query(
           `UPDATE sessions
-           SET tension_title = NULL, tension_steps = NULL, tension_level = 0, tension_discreet = FALSE, tv_mode = 'lobby'
+           SET tension_title = NULL, tension_steps = NULL, tension_level = 0, tension_direction = 'ascending', tension_vibration = FALSE, tv_mode = 'lobby'
            WHERE id = $1 AND created_by = $2`,
           [sessionId, socket.admin.id]
         )
@@ -852,7 +843,6 @@ function setupSocket(io) {
         )
         const player = pr.rows[0]
         if (!player) return
-        const normalizedName = normalizePlayerName(player.player_name)
         // Notify and clear real-time session state for the kicked player
         if (player.socket_id) {
           const playerSocket = io.sockets.sockets.get(player.socket_id)
@@ -868,12 +858,6 @@ function setupSocket(io) {
         const client = await pool.connect()
         try {
           await client.query('BEGIN')
-          await client.query(
-            `INSERT INTO kicked_players (session_id, normalized_player_name)
-             VALUES ($1, $2)
-             ON CONFLICT (session_id, normalized_player_name) DO UPDATE SET kicked_at = NOW()`,
-            [player.session_id, normalizedName]
-          )
           await client.query('DELETE FROM players WHERE id = $1', [playerId])
           await client.query('COMMIT')
         } catch (dbErr) {
