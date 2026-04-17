@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
+import { getThemePreference, setThemePreference } from '../utils/themePreferences.js'
 
 const DOOM_DANGER_THRESHOLD_SECONDS = 10
 const TENSION_COLOR_MEDIUM_RATIO = 0.33
@@ -26,6 +27,13 @@ const activeDoomClock = ref(null)
 const activeTensionScale = ref(null)
 const now = ref(Date.now())
 let clockTickInterval = null
+const theme = ref(getThemePreference('tv', 'dark'))
+const isLightTheme = computed(() => theme.value === 'light')
+
+function toggleTheme() {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  setThemePreference('tv', theme.value)
+}
 
 // Track HP change animations per player: { id -> { type: 'damage'|'heal', delta: number, key: number } }
 const hpAnimations = ref({})
@@ -272,7 +280,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="tv-wrapper">
+  <div class="tv-wrapper" :class="{ 'theme-light': isLightTheme }">
+    <button class="tv-theme-toggle" @click="toggleTheme">
+      {{ isLightTheme ? '🌙 Sombre' : '☀️ Clair' }}
+    </button>
     <!-- Error state -->
     <div v-if="connectionError" class="tv-error">
       <p class="error-icon">⚠️</p>
@@ -500,6 +511,49 @@ onUnmounted(() => {
   padding: 2.5rem 3rem;
   box-sizing: border-box;
   font-size: 18px; /* Base font size boosted for TV viewing distance */
+}
+
+.tv-wrapper.theme-light {
+  --color-bg: #f3ecde;
+  --color-bg2: #ece2d0;
+  --color-parchment: #2f2416;
+  --color-parchment-dark: #6d5a40;
+  --color-gold: #9c7129;
+  --color-gold-bright: #b5822f;
+  --color-gold-dark: #8f6927;
+  --color-red: #b04141;
+  --color-red-bright: #c65252;
+  --color-crimson: #933131;
+  --color-text: #3b2e1e;
+  --color-text-dim: #6f5e47;
+  --color-border: #ccbca0;
+  --color-shadow: rgba(50, 36, 18, 0.18);
+  --color-surface: #fff8ea;
+  --color-surface-alt: #f5ecdd;
+  --color-surface-soft: #efe2cd;
+  background-image: radial-gradient(ellipse at 50% 0%, #efe6d6 0%, #f3ecde 65%);
+}
+
+.tv-theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 20;
+  background: color-mix(in oklab, var(--color-surface-alt) 85%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tv-theme-toggle:hover {
+  color: var(--color-gold-bright);
+  border-color: var(--color-gold-dark);
 }
 
 /* ── Loading / Error ─────────────────────────────────────────────────── */

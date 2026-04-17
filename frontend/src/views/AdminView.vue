@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { authStore } from '../stores/auth.js'
 import { sessionStore } from '../stores/session.js'
@@ -14,9 +14,12 @@ import VoteManager from '../components/admin/VoteManager.vue'
 import ImageManager from '../components/admin/ImageManager.vue'
 import MerchantManager from '../components/admin/MerchantManager.vue'
 import SearchTool from '../components/admin/SearchTool.vue'
+import { getThemePreference, setThemePreference } from '../utils/themePreferences.js'
 
 const router = useRouter()
 const activeTab = ref('sessions')
+const theme = ref(getThemePreference('admin', 'dark'))
+const isLightTheme = computed(() => theme.value === 'light')
 
 const tabs = [
   { key: 'sessions', label: 'Sessions', icon: '📋' },
@@ -34,6 +37,11 @@ function logout() {
   resetSocket()
   authStore.logout()
   router.push('/')
+}
+
+function toggleTheme() {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  setThemePreference('admin', theme.value)
 }
 
 onMounted(() => {
@@ -100,11 +108,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="admin-wrapper">
+  <div class="admin-wrapper" :class="{ 'theme-light': isLightTheme }">
     <header class="admin-header">
       <div class="header-top">
         <h1 class="page-title">🎲 Tableau de Bord <span class="title-accent">MJ</span></h1>
-        <button class="logout-btn" @click="logout">Déconnexion</button>
+        <div class="header-actions">
+          <button class="theme-toggle-btn" @click="toggleTheme">
+            {{ isLightTheme ? '🌙 Sombre' : '☀️ Clair' }}
+          </button>
+          <button class="logout-btn" @click="logout">Déconnexion</button>
+        </div>
       </div>
       <p class="admin-name" v-if="authStore.admin">{{ authStore.admin.username }}</p>
 
@@ -169,6 +182,26 @@ onUnmounted(() => {
   width: 100%;
 }
 
+.admin-wrapper.theme-light {
+  --color-bg: #f3ecde;
+  --color-bg2: #ece2d0;
+  --color-parchment: #2f2416;
+  --color-parchment-dark: #6d5a40;
+  --color-gold: #9c7129;
+  --color-gold-bright: #b5822f;
+  --color-gold-dark: #8f6927;
+  --color-red: #b04141;
+  --color-red-bright: #c65252;
+  --color-crimson: #933131;
+  --color-text: #3b2e1e;
+  --color-text-dim: #6f5e47;
+  --color-border: #ccbca0;
+  --color-shadow: rgba(50, 36, 18, 0.18);
+  --color-surface: #fff8ea;
+  --color-surface-alt: #f5ecdd;
+  --color-surface-soft: #efe2cd;
+}
+
 .admin-header {
   padding: 1.5rem 1.5rem 0;
   background: linear-gradient(180deg, var(--color-surface-alt) 0%, transparent 100%);
@@ -180,6 +213,30 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.25rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.theme-toggle-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--color-gold-dark);
+  color: var(--color-gold-bright);
 }
 
 .page-title {
