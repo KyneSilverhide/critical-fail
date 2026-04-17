@@ -109,6 +109,7 @@ router.patch('/:id/close', authenticateToken, async (req, res) => {
         })
       }
       await pool.query('DELETE FROM session_images WHERE session_id = $1', [req.params.id])
+      await pool.query('DELETE FROM kicked_players WHERE session_id = $1', [req.params.id])
     } catch (cleanErr) {
       console.error('Error cleaning session images:', cleanErr)
     }
