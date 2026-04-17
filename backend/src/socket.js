@@ -281,9 +281,6 @@ function setupSocket(io) {
 
         const activeVote = await getActiveVote(session.id, session.current_vote_id)
         const doomClock = serializeDoomClock(session)
-        if (!doomClock && session.doom_clock_end_at) {
-          await pool.query('UPDATE sessions SET doom_clock_end_at = NULL, doom_clock_title = NULL WHERE id = $1', [session.id])
-        }
 
         socket.emit('tv-snapshot', {
           session: { id: session.id, name: session.name },
@@ -842,14 +839,23 @@ function setupSocket(io) {
             io.to(player.socket_id).emit('kicked')
           }
         }
-        await pool.query(
-          `INSERT INTO kicked_players (session_id, normalized_player_name)
-           VALUES ($1, $2)
-           ON CONFLICT (session_id, normalized_player_name) DO UPDATE SET kicked_at = NOW()`,
-          [player.session_id, normalizedName]
-        )
-        // Remove from DB
-        await pool.query('DELETE FROM players WHERE id = $1', [playerId])
+        const client = await pool.connect()
+        try {
+          await client.query('BEGIN')
+          await client.query(
+            `INSERT INTO kicked_players (session_id, normalized_player_name)
+             VALUES ($1, $2)
+             ON CONFLICT (session_id, normalized_player_name) DO UPDATE SET kicked_at = NOW()`,
+            [player.session_id, normalizedName]
+          )
+          await client.query('DELETE FROM players WHERE id = $1', [playerId])
+          await client.query('COMMIT')
+        } catch (dbErr) {
+          await client.query('ROLLBACK')
+          throw dbErr
+        } finally {
+          client.release()
+        }
         // Notify admin and TV
         io.to(`admin:${player.session_id}`).emit('player-left', { playerId })
         io.to(`tv:${player.session_id}`).emit('player-left', { playerId })
