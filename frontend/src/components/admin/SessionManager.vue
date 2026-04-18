@@ -67,6 +67,35 @@ async function createSession() {
   }
 }
 
+async function deleteSession(id) {
+  const selected = sessionStore.sessions.find(s => s.id === id)
+  const label = selected?.name || `#${id}`
+  const confirmed = window.confirm(`Supprimer définitivement la session "${label}" ?\n\nCette action est irréversible.`)
+  if (!confirmed) return
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/sessions/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      error.value = data.error || 'Erreur lors de la suppression.'
+      return
+    }
+
+    if (sessionStore.activeSession?.id === id) {
+      sessionStore.setActiveSession(null)
+      qrCodeUrl.value = null
+      joinUrl.value = ''
+      tvUrl.value = ''
+    }
+    await loadSessions()
+  } catch {
+    error.value = 'Erreur réseau lors de la suppression.'
+  }
+}
+
 async function loadSessions() {
   try {
     const res = await fetch(`${BACKEND_URL}/api/sessions`, {
@@ -175,6 +204,9 @@ onMounted(loadSessions)
         <button class="close-btn" @click="closeSession(sessionStore.activeSession.id)">
           Fermer la session
         </button>
+        <button class="delete-btn" @click="deleteSession(sessionStore.activeSession.id)">
+          🗑️ Supprimer définitivement
+        </button>
       </div>
     </section>
 
@@ -192,7 +224,10 @@ onMounted(loadSessions)
             <p class="session-name">{{ s.name }}</p>
             <p class="session-code">{{ s.code }}</p>
           </div>
-          <span class="session-status" :class="s.status">{{ s.status }}</span>
+          <div class="session-actions-right">
+            <span class="session-status" :class="s.status">{{ s.status }}</span>
+            <button class="delete-mini-btn" @click.stop="deleteSession(s.id)">🗑️</button>
+          </div>
         </div>
       </div>
     </section>
@@ -461,4 +496,39 @@ onMounted(loadSessions)
   font-size: 0.7rem;
   color: var(--color-text-dim);
 }
+
+.session-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.delete-btn {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.6rem;
+  background: var(--admin-danger-bg, var(--color-danger-soft));
+  border: 1px solid var(--admin-danger-border, var(--color-danger-border));
+  border-radius: 6px;
+  color: var(--admin-danger-text, var(--color-danger));
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.delete-btn:hover { opacity: 0.8; }
+
+.delete-mini-btn {
+  border: 1px solid var(--admin-danger-border, var(--color-danger-border));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--admin-danger-text, var(--color-danger));
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.delete-mini-btn:hover { background: var(--admin-danger-bg, var(--color-danger-soft)); }
 </style>

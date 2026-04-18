@@ -120,6 +120,103 @@ router.patch('/:id/close', authenticateToken, async (req, res) => {
   }
 })
 
+router.delete('/:id', authenticateToken, async (req, res) => {
+  const sessionId = Number(req.params.id)
+  if (!Number.isInteger(sessionId) || sessionId <= 0) {
+    return res.status(400).json({ error: 'Invalid session id.' })
+  }
+
+  const client = await pool.connect()
+  const filesToDelete = []
+
+  try {
+    await client.query('BEGIN')
+
+    // Vérifie que la session appartient à cet admin
+    const exists = await client.query(
+        'SELECT id FROM sessions WHERE id = $1 AND created_by = $2',
+        [sessionId, req.admin.id]
+    )
+    if (exists.rowCount === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Session not found.' })
+    }
+
+    // Collecter les URLs d'images session
+    const imgRows = await client.query(
+        'SELECT url FROM session_images WHERE session_id = $1',
+        [sessionId]
+    )
+    for (const row of imgRows.rows) {
+      if (row.url) filesToDelete.push(path.join(__dirname, '../../uploads', path.basename(row.url)))
+    }
+
+    // Collecter les avatars joueurs
+    const avatarRows = await client.query(
+        'SELECT avatar_url FROM players WHERE session_id = $1 AND avatar_url IS NOT NULL',
+        [sessionId]
+    )
+    for (const row of avatarRows.rows) {
+      if (row.avatar_url) filesToDelete.push(path.join(__dirname, '../../uploads', path.basename(row.avatar_url)))
+    }
+
+    // 1) Nullifier current_vote_id (FK vers votes)
+    await client.query('UPDATE sessions SET current_vote_id = NULL WHERE id = $1', [sessionId])
+
+    // 2) vote_responses
+    await client.query(
+        'DELETE FROM vote_responses WHERE vote_id IN (SELECT id FROM votes WHERE session_id = $1)',
+        [sessionId]
+    )
+
+    // 3) purchase_requests
+    await client.query('DELETE FROM purchase_requests WHERE session_id = $1', [sessionId])
+
+    // 4) merchants (merchant_items par CASCADE ON DELETE)
+    await client.query('DELETE FROM merchants WHERE session_id = $1', [sessionId])
+
+    // 5) session_images
+    await client.query('DELETE FROM session_images WHERE session_id = $1', [sessionId])
+
+    // 6) session_events
+    await client.query('DELETE FROM session_events WHERE session_id = $1', [sessionId])
+
+    // 7) dice_results
+    await client.query('DELETE FROM dice_results WHERE session_id = $1', [sessionId])
+
+    // 8) messages
+    await client.query('DELETE FROM messages WHERE session_id = $1', [sessionId])
+
+    // 9) votes
+    await client.query('DELETE FROM votes WHERE session_id = $1', [sessionId])
+
+    // 10) players
+    await client.query('DELETE FROM players WHERE session_id = $1', [sessionId])
+
+    // 11) session
+    await client.query('DELETE FROM sessions WHERE id = $1', [sessionId])
+
+    await client.query('COMMIT')
+
+    // Suppression fichiers après commit (best effort)
+    await Promise.allSettled(
+        filesToDelete.map(filePath =>
+            fs.unlink(filePath).catch(err => {
+              if (err.code !== 'ENOENT') console.warn('Could not delete file:', filePath, err.code)
+            })
+        )
+    )
+
+    return res.json({ ok: true })
+  } catch (err) {
+    await client.query('ROLLBACK')
+    console.error('Delete session error:', err)
+    return res.status(500).json({ error: 'Server error.' })
+  } finally {
+    client.release()
+  }
+})
+
 router.get('/:id/journal', authenticateToken, async (req, res) => {
   try {
     const sessionCheck = await pool.query(

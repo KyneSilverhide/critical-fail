@@ -44,12 +44,10 @@ const apiLimiter = rateLimit({
   max: 200,
   message: { error: 'Too many requests, please try again later.' },
 })
-
 app.use('/api/auth', authLimiter, authRoutes)
 app.use('/api/sessions', apiLimiter, sessionRoutes)
 app.use('/api/uploads', apiLimiter, uploadRoutes)
 app.use('/api/spells', apiLimiter, spellRoutes)
-
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }))
 
 setupSocket(io)

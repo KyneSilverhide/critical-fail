@@ -11,7 +11,7 @@ let spellsCache = null
 function getSpells() {
   if (spellsCache) return spellsCache
   try {
-    const filePath = path.join(__dirname, '../../aidedd_spells.json')
+    const filePath = path.join(__dirname, '../data/aidedd_spells.json')
     const raw = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(raw)
     // Filter out entries without attributes (the two header-only entries)

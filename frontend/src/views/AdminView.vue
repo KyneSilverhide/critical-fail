@@ -17,21 +17,102 @@ import SearchTool from '../components/admin/SearchTool.vue'
 import { applyTheme, getThemePreference, setThemePreference } from '../utils/themePreferences.js'
 
 const router = useRouter()
-const activeTab = ref('sessions')
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const activeTab = ref('players')
+const isSessionPanelCollapsed = ref(false)
+const tvMode = ref('lobby')
 const theme = ref(getThemePreference('admin', 'dark'))
 const isLightTheme = computed(() => theme.value === 'light')
 
+const hasActiveVote = ref(false)
+const hasActiveImage = ref(false)
+const hasActiveMerchant = ref(false)
+const hasActiveDoom = ref(false)
+const hasActiveTension = ref(false)
+
+
 const tabs = [
-  { key: 'sessions', label: 'Sessions', icon: '📋' },
+  { key: 'players', label: 'Joueurs', icon: '🧙' },
   { key: 'message', label: 'Message', icon: '✉️' },
   { key: 'dice', label: 'Critical Fail', icon: '🎲' },
   { key: 'journal', label: 'Journal', icon: '📜' },
-  { key: 'tv', label: 'TV', icon: '📺' },
+  { key: 'tension', label: 'Rythme', icon: '⏱️' },
   { key: 'vote', label: 'Vote', icon: '🗳️' },
   { key: 'images', label: 'Images', icon: '🖼️' },
   { key: 'merchants', label: 'Marchands', icon: '🏪' },
   { key: 'search', label: 'Recherche', icon: '🔍' },
 ]
+
+const tvModes = computed(() => ([
+  { key: 'lobby', label: 'Lobby', hint: 'Code et QR de session', ready: true },
+  { key: 'combat', label: 'Combat', hint: 'Liste des joueurs / HP / AC', ready: true },
+  { key: 'vote', label: 'Vote', hint: 'Affiche le vote actif', ready: hasActiveVote.value },
+  { key: 'image', label: 'Image', hint: 'Affiche l image active', ready: hasActiveImage.value },
+  { key: 'merchant', label: 'Marchand', hint: 'Affiche le marchand actif', ready: hasActiveMerchant.value },
+  { key: 'doom', label: 'Doom Clock', hint: 'Depuis l onglet Rythme', ready: hasActiveDoom.value },
+  { key: 'tension', label: 'Echelle tension', hint: 'Depuis l onglet Rythme', ready: hasActiveTension.value },
+]))
+
+const activeTvModeLabel = computed(() => {
+  const mode = tvModes.value.find(item => item.key === tvMode.value)
+  return mode?.label || tvMode.value
+})
+
+const activeSessionLabel = computed(() => {
+  if (!sessionStore.activeSession) return ''
+  return `${sessionStore.activeSession.name} - ${sessionStore.activeSession.code}`
+})
+
+function toggleSessionPanel() {
+  isSessionPanelCollapsed.value = !isSessionPanelCollapsed.value
+}
+
+function modeReady(modeKey) {
+  const mode = tvModes.value.find(item => item.key === modeKey)
+  return !!mode?.ready
+}
+
+function modeReadyLabel(modeKey) {
+  return modeReady(modeKey) ? 'prêt' : 'non prêt'
+}
+
+function setTvMode(mode) {
+  if (!sessionStore.activeSession?.id) return
+  if (!modeReady(mode)) return
+
+  const socket = getSocket(authStore.token)
+  socket.emit('set-tv-mode', {
+    sessionId: sessionStore.activeSession.id,
+    mode,
+  })
+}
+
+function handleAdminState(data) {
+  if (sessionStore.activeSession?.id !== data.sessionId) return
+  tvMode.value = data.tvMode || 'lobby'
+
+  hasActiveVote.value = !!data.activeVote
+  hasActiveImage.value = !!data.currentImageUrl
+  hasActiveMerchant.value = !!data.activeMerchant
+  hasActiveDoom.value = !!data.doomClock
+  hasActiveTension.value = !!data.tensionScale
+}
+
+function handleTvModeChanged(payload) {
+  if (payload?.mode) tvMode.value = payload.mode
+}
+
+async function loadSessions() {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/sessions`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    })
+    const data = await res.json()
+    if (res.ok) sessionStore.setSessions(data)
+  } catch {
+    // SessionManager garde son propre chargement en secours.
+  }
+}
 
 function logout() {
   resetSocket()
@@ -46,6 +127,7 @@ function toggleTheme() {
 }
 
 onMounted(() => {
+  loadSessions()
   const socket = getSocket(authStore.token)
 
   // Re-join admin room after socket reconnects so we don't miss events
@@ -83,12 +165,39 @@ onMounted(() => {
   socket.on('initiative-updated', ({ playerId, initiative }) => {
     sessionStore.updatePlayerInitiative(playerId, initiative)
   })
+
+  socket.on('admin-state', handleAdminState)
+  socket.on('tv-mode-changed', handleTvModeChanged)
+
+  socket.on('vote-started', () => { hasActiveVote.value = true })
+  socket.on('vote-closed', () => { hasActiveVote.value = false })
+
+  socket.on('tv-mode-changed', (payload) => {
+    if (payload?.mode) tvMode.value = payload.mode
+    if (payload?.imageUrl !== undefined) hasActiveImage.value = !!payload.imageUrl
+    if (payload?.merchantData !== undefined) hasActiveMerchant.value = !!payload.merchantData
+  })
+
+  socket.on('merchant-items-updated', () => { hasActiveMerchant.value = true })
+
+  socket.on('doom-clock-started', () => { hasActiveDoom.value = true })
+  socket.on('doom-clock-stopped', () => {
+    hasActiveDoom.value = false
+    if (tvMode.value === 'doom') tvMode.value = 'lobby'
+  })
+
+  socket.on('tension-scale-updated', () => { hasActiveTension.value = true })
+  socket.on('tension-scale-ended', () => {
+    hasActiveTension.value = false
+    if (tvMode.value === 'tension') tvMode.value = 'lobby'
+  })
 })
 
 watch(
   () => sessionStore.activeSession?.id,
   (sessionId) => {
     if (!sessionId) return
+    isSessionPanelCollapsed.value = true
     const socket = getSocket(authStore.token)
     socket.emit('admin-join', sessionId)
   },
@@ -105,6 +214,17 @@ onUnmounted(() => {
   socket.off('conditions-updated')
   socket.off('concentration-updated')
   socket.off('initiative-updated')
+  socket.off('admin-state', handleAdminState)
+  socket.off('tv-mode-changed', handleTvModeChanged)
+
+  socket.off('vote-started')
+  socket.off('vote-closed')
+  socket.off('tv-mode-changed')
+  socket.off('merchant-items-updated')
+  socket.off('doom-clock-started')
+  socket.off('doom-clock-stopped')
+  socket.off('tension-scale-updated')
+  socket.off('tension-scale-ended')
 })
 </script>
 
@@ -122,6 +242,23 @@ onUnmounted(() => {
       </div>
       <p class="admin-name" v-if="authStore.admin">{{ authStore.admin.username }}</p>
 
+      <section class="session-header-panel">
+        <div class="session-header-top">
+          <h2 class="session-header-title">📋 Sessions</h2>
+          <button class="session-collapse-btn" @click="toggleSessionPanel">
+            {{ isSessionPanelCollapsed ? 'Afficher' : 'Réduire' }}
+          </button>
+        </div>
+
+        <p v-if="isSessionPanelCollapsed && sessionStore.activeSession" class="session-header-active">
+          Session active: {{ activeSessionLabel }}
+        </p>
+
+        <div v-show="!isSessionPanelCollapsed" class="session-header-content">
+          <SessionManager />
+        </div>
+      </section>
+
       <nav class="admin-nav">
         <button
           v-for="tab in tabs"
@@ -136,39 +273,67 @@ onUnmounted(() => {
       </nav>
     </header>
 
-    <main class="admin-main">
-      <div v-show="activeTab === 'sessions'">
-        <SessionManager />
-        <PlayerList v-if="sessionStore.activeSession" />
-      </div>
-      <div v-show="activeTab === 'message'">
-        <MessageTool />
-      </div>
-      <div v-show="activeTab === 'dice'">
-        <CriticalFailTool />
-      </div>
-      <div v-show="activeTab === 'journal'">
-        <SessionJournal />
-      </div>
-      <div v-show="activeTab === 'tv'">
-        <TvControls v-if="sessionStore.activeSession" />
-        <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
-      </div>
-      <div v-show="activeTab === 'vote'">
-        <VoteManager v-if="sessionStore.activeSession" />
-        <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
-      </div>
-      <div v-show="activeTab === 'images'">
-        <ImageManager v-if="sessionStore.activeSession" />
-        <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
-      </div>
-      <div v-show="activeTab === 'merchants'">
-        <MerchantManager v-if="sessionStore.activeSession" />
-        <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
-      </div>
-      <div v-show="activeTab === 'search'">
-        <SearchTool />
-      </div>
+    <main class="admin-main-grid">
+      <section class="admin-main">
+        <div v-show="activeTab === 'players'">
+          <PlayerList v-if="sessionStore.activeSession" />
+          <p v-else class="no-session-msg">Aucune session active. Choisissez une session dans l'entête.</p>
+        </div>
+        <div v-show="activeTab === 'message'">
+          <MessageTool />
+        </div>
+        <div v-show="activeTab === 'dice'">
+          <CriticalFailTool />
+        </div>
+        <div v-show="activeTab === 'journal'">
+          <SessionJournal />
+        </div>
+        <div v-show="activeTab === 'tension'">
+          <TvControls v-if="sessionStore.activeSession" />
+          <p v-else class="no-session-msg">Aucune session active. Choisissez une session dans l'entête.</p>
+        </div>
+        <div v-show="activeTab === 'vote'">
+          <VoteManager v-if="sessionStore.activeSession" />
+          <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
+        </div>
+        <div v-show="activeTab === 'images'">
+          <ImageManager v-if="sessionStore.activeSession" />
+          <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
+        </div>
+        <div v-show="activeTab === 'merchants'">
+          <MerchantManager v-if="sessionStore.activeSession" />
+          <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
+        </div>
+        <div v-show="activeTab === 'search'">
+          <SearchTool />
+        </div>
+      </section>
+
+      <aside class="tv-sidebar">
+        <h2 class="tv-sidebar-title">📺 Diffusion TV</h2>
+        <p class="tv-sidebar-subtitle">
+          Mode actuel: <span class="tv-mode-current">{{ activeTvModeLabel }}</span>
+        </p>
+        <div v-if="sessionStore.activeSession" class="tv-mode-list">
+          <button
+              v-for="mode in tvModes"
+              :key="mode.key"
+              class="tv-mode-btn"
+              :class="{ active: tvMode === mode.key, disabled: !mode.ready }"
+              :disabled="!mode.ready"
+              @click="setTvMode(mode.key)"
+          >
+            <div class="tv-mode-top">
+              <span class="tv-mode-label">{{ mode.label }}</span>
+              <span class="tv-ready-badge" :class="mode.ready ? 'ready' : 'not-ready'">
+                {{ mode.ready ? 'prêt' : 'non prêt' }}
+              </span>
+            </div>
+            <span class="tv-mode-hint">{{ mode.hint }}</span>
+          </button>
+        </div>
+        <p v-else class="no-session-msg">Sélectionnez une session pour piloter l'écran TV.</p>
+      </aside>
     </main>
   </div>
 </template>
@@ -178,7 +343,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
   width: 100%;
   color: var(--color-text);
@@ -241,7 +406,6 @@ onUnmounted(() => {
 }
 
 .page-title {
-  font-family: var(--font-title);
   font-size: 1.4rem;
   color: var(--color-parchment);
 }
@@ -278,6 +442,7 @@ onUnmounted(() => {
 
 .admin-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
   margin-top: 0.5rem;
 }
@@ -309,8 +474,170 @@ onUnmounted(() => {
 }
 
 .admin-main {
+  min-width: 0;
+}
+
+.admin-main-grid {
   flex: 1;
   padding: 1.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.tv-sidebar {
+  position: sticky;
+  top: 1rem;
+  background: var(--admin-panel-highlight-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+   padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tv-sidebar-title {
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-gold-dark);
+  margin: 0;
+}
+
+.tv-sidebar-subtitle {
+  margin: 0;
+  color: var(--color-text-dim);
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tv-mode-current {
+  color: var(--color-gold-bright);
+}
+
+.tv-mode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tv-mode-btn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--admin-control-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.tv-mode-btn:hover {
+  border-color: var(--color-gold-dark);
+}
+
+.tv-mode-btn.active {
+  border-color: var(--color-gold-bright);
+  background: var(--admin-gold-bg);
+}
+
+.tv-mode-label {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.tv-mode-hint {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+}
+
+.session-header-panel {
+  margin: 0.5rem 0 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: var(--admin-panel-highlight-bg);
+}
+
+.session-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.session-header-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-gold-dark);
+}
+
+.session-collapse-btn {
+  border: 1px solid var(--color-border);
+  background: var(--admin-control-bg);
+  color: var(--color-text-dim);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.session-collapse-btn:hover {
+  border-color: var(--color-gold-dark);
+  color: var(--color-gold-bright);
+}
+
+.session-header-active {
+  margin: 0.45rem 0 0;
+  color: var(--color-gold);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+}
+
+.session-header-content {
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 1220px) {
+  .admin-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tv-sidebar {
+    position: static;
+    order: -1;
+  }
+}
+
+@media (max-width: 860px) {
+  .header-top {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+}
+
+.admin-main {
+  padding: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--admin-panel-bg);
 }
 
 .app-footer {
@@ -328,5 +655,40 @@ onUnmounted(() => {
   color: var(--color-text-dim);
   font-size: 0.9rem;
   padding: 1rem 0;
+}
+
+.tv-mode-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tv-ready-badge {
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid transparent;
+}
+
+.tv-ready-badge.ready {
+  color: var(--admin-success-text);
+  background: var(--admin-success-bg);
+  border-color: var(--admin-success-border);
+}
+
+.tv-ready-badge.not-ready {
+  color: var(--color-text-dim);
+  background: var(--admin-control-bg-muted);
+  border-color: var(--color-border);
+}
+
+.tv-mode-btn.disabled,
+.tv-mode-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 </style>
