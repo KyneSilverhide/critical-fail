@@ -664,9 +664,21 @@ onUnmounted(() => {
 .party-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 2rem;
   align-content: start;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Centre le dernier joueur quand le total est impair */
+.player-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  max-width: calc(50% - 1rem);
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ── Player Card ─────────────────────────────────────────────────────── */
