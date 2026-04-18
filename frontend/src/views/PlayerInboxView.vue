@@ -724,7 +724,7 @@ onUnmounted(() => {
             :disabled="hpSending || pendingHp === currentHp"
             @click="sendHpUpdate"
           >
-            {{ hpSent ? '✓ Mis à jour' : hpSending ? '…' : '📡 Confirmer les PV' }}
+            {{ hpSent ? '✓ Mis à jour' : hpSending ? '…' : '📡 Mettre à jour' }}
           </button>
         </div>
 
@@ -941,9 +941,8 @@ onUnmounted(() => {
         :class="{ active: activeTab === 'combat' }"
         @click="switchTab('combat')"
       >
-        <span class="tab-icon" :class="{ 'tab-icon-notify': activeConditions.length > 0 }">⚔️</span>
+        <span class="tab-icon">⚔️</span>
         <span class="tab-label">Combat</span>
-        <span v-if="activeConditions.length > 0" class="tab-badge tab-badge-urgent">{{ activeConditions.length }}</span>
       </button>
       <button
         class="tab-item"

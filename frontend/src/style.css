@@ -89,7 +89,7 @@
   --color-parchment: #2f261a;
   --color-parchment-dark: #5f503d;
   --color-gold: #9b7a35;
-  --color-gold-bright: #b8892f;
+  --color-gold-bright: #634918;
   --color-gold-dark: #806126;
   --color-red: #a54a42;
   --color-red-bright: #bf5d55;
@@ -193,7 +193,6 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 0 0 2rem 0;
   color: inherit;
 }
 

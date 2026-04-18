@@ -43,11 +43,9 @@ function resolveThemeColor(variableName, fallback) {
 function clearCanvas() {
   const canvas = canvasRef.value
   if (!canvas || !ctx) return
-  ctx.fillStyle = resolveThemeColor('--notes-canvas-bg', 'transparent')
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight)
   scheduleSave()
 }
-
 function clearAll() {
   notesText.value = ''
   clearCanvas()

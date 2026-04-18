@@ -153,7 +153,6 @@ async function joinSession() {
   <div class="join-wrapper">
     <header class="join-header">
       <button class="back-btn" @click="router.push('/')">← Retour</button>
-      <div class="skull-ornament">⚔️</div>
       <h1 class="page-title">Rejoindre <span class="title-accent">une Session</span></h1>
     </header>
 
@@ -163,7 +162,7 @@ async function joinSession() {
         <div class="form-group">
           <label class="form-label">Code de session</label>
           <input v-model="sessionCode" type="text" class="form-input"
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+            placeholder="Série de 8 chiffres" />
           <p class="form-hint">Fourni par votre MJ ou via le QR Code.</p>
         </div>
 

@@ -302,7 +302,6 @@ onUnmounted(() => {
       <!-- Lobby mode: session title + QR code + session code -->
       <div v-if="tvMode === 'lobby'" class="lobby-display">
         <header class="tv-header">
-          <div class="lobby-ornament" aria-hidden="true">⚜</div>
           <h1 class="session-title">{{ session.name }}</h1>
           <div class="lobby-divider" aria-hidden="true">⸻ ✦ ⸻</div>
         </header>
@@ -488,10 +487,6 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-
-      <footer class="tv-footer">
-        <span class="footer-text">CRITICAL FAIL • SESSION EN COURS</span>
-      </footer>
     </template>
   </div>
 </template>
@@ -509,7 +504,6 @@ onUnmounted(() => {
   background-image: var(--gradient-page);
   display: flex;
   flex-direction: column;
-  padding: 2.5rem 3rem;
   box-sizing: border-box;
   font-size: 18px; /* Base font size boosted for TV viewing distance */
   color: var(--color-text);
@@ -591,12 +585,7 @@ onUnmounted(() => {
   letter-spacing: 0.1em;
   margin: 0.15rem 0;
 }
-.lobby-ornament {
-  font-size: clamp(0.9rem, 1.8vw, 1.5rem);
-  color: var(--color-gold-dark);
-  opacity: 0.8;
-  margin-bottom: 0.3rem;
-}
+
 .lobby-divider {
   font-family: var(--font-heading);
   font-size: clamp(0.48rem, 0.9vw, 0.66rem);
@@ -623,8 +612,8 @@ onUnmounted(() => {
   margin: 0;
 }
 .lobby-qr {
-  width: clamp(120px, 18vw, 240px);
-  height: clamp(120px, 18vw, 240px);
+  width: 400px;
+  height: 400px;
   border: 2px solid var(--color-gold-dark);
   border-radius: 10px;
   background: white;

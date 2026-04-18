@@ -7,18 +7,16 @@ const router = useRouter()
 <template>
   <div class="home-wrapper">
     <header class="home-header">
-      <div class="skull-ornament">🧰</div>
       <h1 class="app-title">DM <span class="title-accent">Toolkit</span></h1>
-      <p class="app-subtitle">Outils de maîtrise et de table</p>
+      <p class="app-subtitle">Votre compagnon pour vos sessions de JDR !</p>
     </header>
 
     <main class="home-main">
-      <p class="home-prompt">Qui es-tu, aventurier ?</p>
       <div class="home-buttons">
         <button class="home-btn mj-btn" @click="router.push('/login')">
           <span class="btn-icon">🎲</span>
           <span class="btn-label">Je suis MJ</span>
-          <span class="btn-sub">Maître du Jeu</span>
+          <span class="btn-sub">Accéder à l'administration</span>
         </button>
         <button class="home-btn player-btn" @click="router.push('/join')">
           <span class="btn-icon">⚔️</span>
@@ -41,12 +39,6 @@ const router = useRouter()
 .home-header {
   text-align: center;
   padding: 3rem 1.5rem 2rem;
-}
-
-.skull-ornament {
-  font-size: 2.5rem;
-  filter: drop-shadow(0 0 8px var(--color-danger-soft));
-  animation: floatSkull 3s ease-in-out infinite;
 }
 
 @keyframes floatSkull {

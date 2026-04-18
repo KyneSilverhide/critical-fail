@@ -43,7 +43,6 @@ async function login() {
   <div class="login-wrapper">
     <header class="login-header">
       <button class="back-btn" @click="router.push('/')">← Retour</button>
-      <div class="skull-ornament">🎲</div>
       <h1 class="page-title">Connexion <span class="title-accent">MJ</span></h1>
       <p class="page-subtitle">Maître du Jeu</p>
     </header>
