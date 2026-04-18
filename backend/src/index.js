@@ -56,12 +56,14 @@ async function seedAdmin() {
   try {
     const result = await pool.query('SELECT COUNT(*) FROM admins')
     if (parseInt(result.rows[0].count) === 0) {
-      const hash = await bcrypt.hash('admin123', 10)
+      const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || 'admin123'
+      const adminUsername = process.env.ADMIN_DEFAULT_USERNAME || 'admin'
+      const hash = await bcrypt.hash(adminPassword, 10)
       await pool.query(
-        'INSERT INTO admins (username, password_hash) VALUES ($1, $2)',
-        ['admin', hash]
+          'INSERT INTO admins (username, password_hash) VALUES ($1, $2)',
+          [adminUsername, hash]
       )
-      console.log('Default admin created: admin / admin123')
+      console.log(`Default admin created: ${adminUsername} / [password from env]`)
     }
   } catch (err) {
     console.error('Error seeding admin:', err)
