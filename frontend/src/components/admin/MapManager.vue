@@ -341,7 +341,7 @@ watch(fogEnabled, () => nextTick(renderFog))
               <input v-model="brushMode" type="checkbox" />
               🖌️ Mode pinceau
             </label>
-            <label class="brush-label" v-if="brushMode">
+            <label v-if="brushMode" class="brush-label">
               Rayon: {{ brushRadius }}px
               <input
                 v-model.number="brushRadius"
