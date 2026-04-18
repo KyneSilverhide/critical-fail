@@ -33,10 +33,40 @@ const isLightTheme = computed(() => theme.value === 'light')
 // ── Map state ──────────────────────────────────────────────────────────────
 const currentMapUrl = ref(null)
 const mapFogEnabled = ref(false)
-const mapViewport = ref({ x: 0, y: 0, scale: 1 })
+const mapViewport = ref({ xn: 0, yn: 0, scale: 1 })
 const mapFogStrokes = ref([])
 const mapFogCanvas = ref(null)
 const mapContainerRef = ref(null)
+const mapImageSize = ref({ w: 0, h: 0 })
+
+const mapImageStyle = computed(() => {
+  const container = mapContainerRef.value
+  if (!container) return {}
+  const W = container.offsetWidth || 1920
+  const H = container.offsetHeight || 1080
+
+  // On a besoin des dimensions naturelles — on les récupère du DOM
+  const natW = mapImageSize.value.w || 1920
+  const natH = mapImageSize.value.h || 1080
+
+  const vp = mapViewport.value
+  const baseScale = Math.min(W / natW, H / natH)
+  const totalScale = baseScale * vp.scale
+  const imgW = natW * totalScale
+  const imgH = natH * totalScale
+  const offsetX = W / 2 - imgW / 2 + (vp.xn * natW * baseScale)
+  const offsetY = H / 2 - imgH / 2 + (vp.yn * natH * baseScale)
+
+  return {
+    position: 'absolute',
+    left: `${offsetX}px`,
+    top: `${offsetY}px`,
+    width: `${imgW}px`,
+    height: `${imgH}px`,
+    transform: 'none',
+    transformOrigin: undefined,
+  }
+})
 
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
@@ -49,6 +79,11 @@ const hpAnimations = ref({})
 // Track previous HP values to compute delta
 const previousHp = ref({})
 
+function onMapImageLoad(e) {
+  mapImageSize.value = { w: e.target.naturalWidth, h: e.target.naturalHeight }
+  renderMapFog()
+}
+
 // ── Map fog rendering ──────────────────────────────────────────────────────
 function renderMapFog() {
   const canvas = mapFogCanvas.value
@@ -56,45 +91,65 @@ function renderMapFog() {
   const container = mapContainerRef.value
   if (!container) return
 
-  canvas.width = container.offsetWidth || 1920
-  canvas.height = container.offsetHeight || 1080
+  const W = container.offsetWidth || 1920
+  const H = container.offsetHeight || 1080
+  canvas.width = W
+  canvas.height = H
 
   const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.clearRect(0, 0, W, H)
 
   if (!mapFogEnabled.value) return
 
   // Draw full fog
   ctx.globalCompositeOperation = 'source-over'
-  ctx.fillStyle = 'rgba(0,0,0,0.92)'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = 'rgba(0,0,0,1)'
+  ctx.fillRect(0, 0, W, H)
 
   if (mapFogStrokes.value.length === 0) return
 
-  // Erase revealed areas using strokes
-  // Strokes are stored in map-image coordinate space; we must apply the same
-  // viewport transform as the image to map them to screen space.
+  const natW = mapImageSize.value.w
+  const natH = mapImageSize.value.h
+  if (!natW || !natH) return
+
+  // Replicate the same CSS transform the image uses
   const vp = mapViewport.value
+  const baseScale = Math.min(W / natW, H / natH)
+  const totalScale = baseScale * vp.scale
+  const imgW = natW * totalScale
+  const imgH = natH * totalScale
+  const offsetX = W / 2 - imgW / 2 + (vp.xn * natW * baseScale)
+  const offsetY = H / 2 - imgH / 2 + (vp.yn * natH * baseScale)
+
+  // Erase revealed areas
   ctx.globalCompositeOperation = 'destination-out'
-  ctx.save()
-  // The image is CSS-transformed via translate(x,y) scale(s); we replicate that here
-  ctx.translate(vp.x, vp.y)
-  ctx.scale(vp.scale, vp.scale)
   for (const stroke of mapFogStrokes.value) {
     ctx.beginPath()
-    ctx.arc(stroke.x, stroke.y, stroke.r, 0, Math.PI * 2)
+    ctx.arc(
+        offsetX + stroke.nx * natW * totalScale,
+        offsetY + stroke.ny * natH * totalScale,
+        stroke.nr * natW * totalScale,
+        0, Math.PI * 2
+    )
     ctx.fillStyle = 'rgba(0,0,0,1)'
     ctx.fill()
   }
-  ctx.restore()
   ctx.globalCompositeOperation = 'source-over'
 }
 
 function applyMapState(data) {
   if (!data) return
+  // Réinitialiser la taille si l'image change
+  if (data.mapUrl !== currentMapUrl.value) {
+    mapImageSize.value = { w: 0, h: 0 }
+  }
   currentMapUrl.value = data.mapUrl || null
   mapFogEnabled.value = !!data.fogEnabled
-  mapViewport.value = data.viewport || { x: 0, y: 0, scale: 1 }
+  mapViewport.value = {
+    xn: data.viewport?.xn ?? data.viewport?.x ?? 0,
+    yn: data.viewport?.yn ?? data.viewport?.y ?? 0,
+    scale: data.viewport?.scale ?? 1,
+  }
   mapFogStrokes.value = Array.isArray(data.fogStrokes) ? data.fogStrokes : []
   nextTick(renderMapFog)
 }
@@ -335,8 +390,8 @@ onMounted(() => {
   // ── Map events ─────────────────────────────────────────────────────────
   socket.on('map-state', applyMapState)
 
-  socket.on('map-viewport-changed', ({ x, y, scale }) => {
-    mapViewport.value = { x, y, scale }
+  socket.on('map-viewport-changed', ({ xn, yn, scale }) => {
+    mapViewport.value = { xn: xn ?? 0, yn: yn ?? 0, scale: scale ?? 1 }
     nextTick(renderMapFog)
   })
 
@@ -356,11 +411,14 @@ onMounted(() => {
     mapFogStrokes.value = []
     renderMapFog()
   })
+
+  window.addEventListener('resize', renderMapFog)
 })
 
 onUnmounted(() => {
   if (clockTickInterval) window.clearInterval(clockTickInterval)
   if (socket) socket.disconnect()
+  window.removeEventListener('resize', renderMapFog)
 })
 </script>
 
@@ -548,15 +606,7 @@ onUnmounted(() => {
       <!-- Map mode -->
       <div v-else-if="tvMode === 'map' && currentMapUrl" ref="mapContainerRef" class="map-display">
         <!-- Layer 1: map image -->
-        <img
-          :src="resolveMediaUrl(currentMapUrl)"
-          class="map-image"
-          :style="{
-            transform: `translate(${mapViewport.x}px, ${mapViewport.y}px) scale(${mapViewport.scale})`,
-            transformOrigin: '0 0',
-          }"
-          alt="Carte"
-        />
+        <img  :src="resolveMediaUrl(currentMapUrl)"  class="map-image"  :style="mapImageStyle"  alt="Carte"  @load="onMapImageLoad"/>
         <!-- Layer 2: fog of war canvas -->
         <canvas ref="mapFogCanvas" class="map-fog-canvas" />
         <!-- Layer 3: player tokens -->
@@ -1286,12 +1336,9 @@ onUnmounted(() => {
 }
 .map-image {
   position: absolute;
-  top: 0;
-  left: 0;
   max-width: none;
   display: block;
   z-index: 1;
-  will-change: transform;
   user-select: none;
   pointer-events: none;
 }

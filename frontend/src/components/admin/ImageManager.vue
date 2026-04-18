@@ -9,6 +9,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 const images = ref([])
 const uploading = ref(false)
 const uploadError = ref('')
+const uploadProgress = ref(0)   // 0–100
 
 async function loadImages() {
   if (!sessionStore.activeSession) return
@@ -22,32 +23,52 @@ async function loadImages() {
   }
 }
 
-async function handleFileUpload(event) {
+function handleFileUpload(event) {
   const files = Array.from(event.target.files || [])
   if (files.length === 0) return
+
   uploading.value = true
   uploadError.value = ''
-  try {
-    const formData = new FormData()
-    files.forEach(file => formData.append('files', file))
-    formData.append('session_id', sessionStore.activeSession.id)
-    const res = await fetch(`${BACKEND_URL}/api/uploads`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authStore.token}` },
-      body: formData,
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      uploadError.value = data.error || 'Erreur lors du téléversement.'
-      return
+  uploadProgress.value = 0
+
+  const formData = new FormData()
+  files.forEach(file => formData.append('files', file))
+  formData.append('session_id', sessionStore.activeSession.id)
+
+  const xhr = new XMLHttpRequest()
+
+  xhr.upload.addEventListener('progress', (e) => {
+    if (e.lengthComputable) {
+      uploadProgress.value = Math.round((e.loaded / e.total) * 100)
     }
-    await loadImages()
-  } catch {
-    uploadError.value = 'Erreur de connexion.'
-  } finally {
+  })
+
+  xhr.addEventListener('load', async () => {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      await loadImages()
+    } else {
+      try {
+        const data = JSON.parse(xhr.responseText)
+        uploadError.value = data.error || 'Erreur lors du téléversement.'
+      } catch {
+        uploadError.value = 'Erreur lors du téléversement.'
+      }
+    }
     uploading.value = false
+    uploadProgress.value = 0
     event.target.value = ''
-  }
+  })
+
+  xhr.addEventListener('error', () => {
+    uploadError.value = 'Erreur de connexion.'
+    uploading.value = false
+    uploadProgress.value = 0
+    event.target.value = ''
+  })
+
+  xhr.open('POST', `${BACKEND_URL}/api/uploads`)
+  xhr.setRequestHeader('Authorization', `Bearer ${authStore.token}`)
+  xhr.send(formData)
 }
 
 function showImageOnTv(imageUrl) {
@@ -68,17 +89,23 @@ onMounted(loadImages)
     <h3 class="section-title">🖼️ Gestionnaire d'Images</h3>
 
     <div class="upload-area">
-      <label class="upload-btn">
-        <span>{{ uploading ? '…' : '📁 Téléverser des images' }}</span>
+      <label class="upload-btn" :class="{ disabled: uploading }">
+        <span>{{ uploading ? `Envoi… ${uploadProgress}%` : '📁 Téléverser des images' }}</span>
         <input
-          type="file"
-          accept="image/*"
-          multiple
-          class="file-input"
-          :disabled="uploading"
-          @change="handleFileUpload"
+            type="file"
+            accept="image/*"
+            multiple
+            class="file-input"
+            :disabled="uploading"
+            @change="handleFileUpload"
         />
       </label>
+
+      <div v-if="uploading" class="progress-track">
+        <div class="progress-fill" :style="{ width: uploadProgress + '%' }" />
+        <span class="progress-label">{{ uploadProgress }}%</span>
+      </div>
+
       <p v-if="uploadError" class="upload-error">{{ uploadError }}</p>
     </div>
 
@@ -189,5 +216,45 @@ onMounted(loadImages)
   text-align: center;
   white-space: nowrap;
 }
-.show-btn:hover { background: var(--surface-gold-soft-strong); border-color: var(--color-gold-bright); color: var(--color-gold-bright); }
+
+.show-btn:hover {
+  background: var(--surface-gold-soft-strong);
+  border-color: var(--color-gold-bright);
+  color: var(--color-gold-bright);
+}
+
+.upload-btn.disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.progress-track {
+  position: relative;
+  height: 10px;
+  background: var(--surface-track);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-gold-dark), var(--color-gold-bright));
+  border-radius: 6px;
+  transition: width 0.15s ease;
+}
+
+.progress-label {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  color: var(--color-text-dim);
+  letter-spacing: 0.05em;
+  line-height: 1;
+  pointer-events: none;
+}
 </style>

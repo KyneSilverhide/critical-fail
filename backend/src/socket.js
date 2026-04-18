@@ -59,10 +59,16 @@ function serializeTensionScale(session) {
 
 function serializeMapState(session) {
   if (!session?.current_map_url) return null
-  let viewport = { x: 0, y: 0, scale: 1 }
+  let viewport = { xn: 0, yn: 0, scale: 1 }
   try {
     const parsed = session.map_viewport ? JSON.parse(session.map_viewport) : null
-    if (parsed && typeof parsed.scale === 'number') viewport = parsed
+    if (parsed && typeof parsed.scale === 'number') {
+      viewport = {
+        xn: parsed.xn ?? parsed.x ?? 0,
+        yn: parsed.yn ?? parsed.y ?? 0,
+        scale: parsed.scale,
+      }
+    }
   } catch { /* use default */ }
   let fogStrokes = []
   try {
@@ -635,7 +641,7 @@ function setupSocket(io) {
       if (!socket.admin) return
       try {
         if (!imageUrl || typeof imageUrl !== 'string') return
-        const defaultViewport = JSON.stringify({ x: 0, y: 0, scale: 1 })
+        const defaultViewport = JSON.stringify({ xn: 0, yn: 0, scale: 1 })
         await pool.query(
           `UPDATE sessions
            SET tv_mode = 'map', current_map_url = $1, map_fog_enabled = FALSE,
@@ -643,7 +649,7 @@ function setupSocket(io) {
            WHERE id = $3 AND created_by = $4`,
           [imageUrl, defaultViewport, sessionId, socket.admin.id]
         )
-        const mapState = { mapUrl: imageUrl, fogEnabled: false, viewport: { x: 0, y: 0, scale: 1 }, fogStrokes: [] }
+        const mapState = { mapUrl: imageUrl, fogEnabled: false, viewport: { xn: 0, yn: 0, scale: 1 }, fogStrokes: [] }
         io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'map' })
         io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'map' })
         io.to(`tv:${sessionId}`).emit('map-state', mapState)
@@ -665,18 +671,18 @@ function setupSocket(io) {
     })
 
     // ── Admin: update map viewport ──────────────────────────────────────────
-    socket.on('map-viewport-update', async ({ sessionId, x, y, scale }) => {
+    socket.on('map-viewport-update', async ({ sessionId, xn, yn, scale }) => {
       if (!socket.admin) return
       try {
         const safeScale = Math.max(MAP_SCALE_MIN, Math.min(MAP_SCALE_MAX, Number(scale) || 1))
-        const safeX = Number(x) || 0
-        const safeY = Number(y) || 0
-        const viewport = JSON.stringify({ x: safeX, y: safeY, scale: safeScale })
+        const safeXn = Number(xn) || 0
+        const safeYn = Number(yn) || 0
+        const viewport = JSON.stringify({ xn: safeXn, yn: safeYn, scale: safeScale })
         await pool.query(
-          'UPDATE sessions SET map_viewport = $1 WHERE id = $2 AND created_by = $3',
-          [viewport, sessionId, socket.admin.id]
+            'UPDATE sessions SET map_viewport = $1 WHERE id = $2 AND created_by = $3',
+            [viewport, sessionId, socket.admin.id]
         )
-        io.to(`tv:${sessionId}`).emit('map-viewport-changed', { x: safeX, y: safeY, scale: safeScale })
+        io.to(`tv:${sessionId}`).emit('map-viewport-changed', { xn: safeXn, yn: safeYn, scale: safeScale })
       } catch (err) { console.error(err) }
     })
 
