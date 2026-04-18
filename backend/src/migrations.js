@@ -149,6 +149,11 @@ ALTER TABLE sessions DROP COLUMN IF EXISTS tension_discreet;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tension_direction VARCHAR(20) DEFAULT 'ascending';
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tension_vibration BOOLEAN DEFAULT FALSE;
 DROP TABLE IF EXISTS kicked_players;
+
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS current_map_url VARCHAR(500);
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS map_fog_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS map_viewport TEXT;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS map_fog_strokes TEXT;
 `
 
 async function runMigrations() {
