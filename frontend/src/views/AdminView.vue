@@ -14,6 +14,7 @@ import VoteManager from '../components/admin/VoteManager.vue'
 import ImageManager from '../components/admin/ImageManager.vue'
 import MerchantManager from '../components/admin/MerchantManager.vue'
 import SearchTool from '../components/admin/SearchTool.vue'
+import MapManager from '../components/admin/MapManager.vue'
 import { applyTheme, getThemePreference, setThemePreference } from '../utils/themePreferences.js'
 
 const router = useRouter()
@@ -29,6 +30,7 @@ const hasActiveImage = ref(false)
 const hasActiveMerchant = ref(false)
 const hasActiveDoom = ref(false)
 const hasActiveTension = ref(false)
+const hasActiveMap = ref(false)
 
 
 const tabs = [
@@ -39,6 +41,7 @@ const tabs = [
   { key: 'tension', label: 'Rythme', icon: '⏱️' },
   { key: 'vote', label: 'Vote', icon: '🗳️' },
   { key: 'images', label: 'Images', icon: '🖼️' },
+  { key: 'map', label: 'Carte', icon: '🗺️' },
   { key: 'merchants', label: 'Marchands', icon: '🏪' },
   { key: 'search', label: 'Recherche', icon: '🔍' },
 ]
@@ -48,6 +51,7 @@ const tvModes = computed(() => ([
   { key: 'combat', label: 'Combat', hint: 'Liste des joueurs / HP / AC', ready: true },
   { key: 'vote', label: 'Vote', hint: 'Affiche le vote actif', ready: hasActiveVote.value },
   { key: 'image', label: 'Image', hint: 'Affiche l image active', ready: hasActiveImage.value },
+  { key: 'map', label: 'Carte', hint: 'Depuis l onglet Carte', ready: hasActiveMap.value },
   { key: 'merchant', label: 'Marchand', hint: 'Affiche le marchand actif', ready: hasActiveMerchant.value },
   { key: 'doom', label: 'Doom Clock', hint: 'Depuis l onglet Rythme', ready: hasActiveDoom.value },
   { key: 'tension', label: 'Echelle tension', hint: 'Depuis l onglet Rythme', ready: hasActiveTension.value },
@@ -96,6 +100,7 @@ function handleAdminState(data) {
   hasActiveMerchant.value = !!data.activeMerchant
   hasActiveDoom.value = !!data.doomClock
   hasActiveTension.value = !!data.tensionScale
+  hasActiveMap.value = !!(data.mapState?.mapUrl)
 }
 
 function handleTvModeChanged(payload) {
@@ -178,6 +183,10 @@ onMounted(() => {
     if (payload?.merchantData !== undefined) hasActiveMerchant.value = !!payload.merchantData
   })
 
+  socket.on('map-state', (data) => {
+    hasActiveMap.value = !!(data?.mapUrl)
+  })
+
   socket.on('merchant-items-updated', () => { hasActiveMerchant.value = true })
 
   socket.on('doom-clock-started', () => { hasActiveDoom.value = true })
@@ -225,6 +234,7 @@ onUnmounted(() => {
   socket.off('doom-clock-stopped')
   socket.off('tension-scale-updated')
   socket.off('tension-scale-ended')
+  socket.off('map-state')
 })
 </script>
 
@@ -298,6 +308,10 @@ onUnmounted(() => {
         </div>
         <div v-show="activeTab === 'images'">
           <ImageManager v-if="sessionStore.activeSession" />
+          <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
+        </div>
+        <div v-show="activeTab === 'map'">
+          <MapManager v-if="sessionStore.activeSession" />
           <p v-else class="no-session-msg">Aucune session active. Créez ou sélectionnez une session.</p>
         </div>
         <div v-show="activeTab === 'merchants'">

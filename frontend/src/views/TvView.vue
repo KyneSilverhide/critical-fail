@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { io } from 'socket.io-client'
 import { applyTheme, getThemePreference, setThemePreference } from '../utils/themePreferences.js'
@@ -30,6 +30,14 @@ let clockTickInterval = null
 const theme = ref(getThemePreference('tv', 'dark'))
 const isLightTheme = computed(() => theme.value === 'light')
 
+// ── Map state ──────────────────────────────────────────────────────────────
+const currentMapUrl = ref(null)
+const mapFogEnabled = ref(false)
+const mapViewport = ref({ x: 0, y: 0, scale: 1 })
+const mapFogStrokes = ref([])
+const mapFogCanvas = ref(null)
+const mapContainerRef = ref(null)
+
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
   setThemePreference('tv', theme.value)
@@ -40,6 +48,56 @@ function toggleTheme() {
 const hpAnimations = ref({})
 // Track previous HP values to compute delta
 const previousHp = ref({})
+
+// ── Map fog rendering ──────────────────────────────────────────────────────
+function renderMapFog() {
+  const canvas = mapFogCanvas.value
+  if (!canvas) return
+  const container = mapContainerRef.value
+  if (!container) return
+
+  canvas.width = container.offsetWidth || 1920
+  canvas.height = container.offsetHeight || 1080
+
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  if (!mapFogEnabled.value) return
+
+  // Draw full fog
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillStyle = 'rgba(0,0,0,0.92)'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  if (mapFogStrokes.value.length === 0) return
+
+  // Erase revealed areas using strokes
+  // Strokes are stored in map-image coordinate space; we must apply the same
+  // viewport transform as the image to map them to screen space.
+  const vp = mapViewport.value
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.save()
+  // The image is CSS-transformed via translate(x,y) scale(s); we replicate that here
+  ctx.translate(vp.x, vp.y)
+  ctx.scale(vp.scale, vp.scale)
+  for (const stroke of mapFogStrokes.value) {
+    ctx.beginPath()
+    ctx.arc(stroke.x, stroke.y, stroke.r, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,1)'
+    ctx.fill()
+  }
+  ctx.restore()
+  ctx.globalCompositeOperation = 'source-over'
+}
+
+function applyMapState(data) {
+  if (!data) return
+  currentMapUrl.value = data.mapUrl || null
+  mapFogEnabled.value = !!data.fogEnabled
+  mapViewport.value = data.viewport || { x: 0, y: 0, scale: 1 }
+  mapFogStrokes.value = Array.isArray(data.fogStrokes) ? data.fogStrokes : []
+  nextTick(renderMapFog)
+}
 
 function hpPercent(player) {
   if (!player.max_hp) return 100
@@ -170,6 +228,7 @@ onMounted(() => {
     activeDoomClock.value = data.doomClock || null
     activeTensionScale.value = data.tensionScale || null
     data.players.forEach(pl => { previousHp.value[pl.id] = pl.current_hp })
+    if (data.mapState) applyMapState(data.mapState)
   })
 
   socket.on('tv-mode-changed', ({ mode, imageUrl, merchantData }) => {
@@ -271,6 +330,31 @@ onMounted(() => {
 
   socket.on('tension-scale-ended', () => {
     activeTensionScale.value = null
+  })
+
+  // ── Map events ─────────────────────────────────────────────────────────
+  socket.on('map-state', applyMapState)
+
+  socket.on('map-viewport-changed', ({ x, y, scale }) => {
+    mapViewport.value = { x, y, scale }
+    nextTick(renderMapFog)
+  })
+
+  socket.on('map-fog-updated', ({ enabled }) => {
+    mapFogEnabled.value = enabled
+    nextTick(renderMapFog)
+  })
+
+  socket.on('map-fog-patch', ({ strokes }) => {
+    if (Array.isArray(strokes)) {
+      mapFogStrokes.value.push(...strokes)
+      renderMapFog()
+    }
+  })
+
+  socket.on('map-fog-reset', () => {
+    mapFogStrokes.value = []
+    renderMapFog()
   })
 })
 
@@ -459,6 +543,35 @@ onUnmounted(() => {
       <!-- Image mode -->
       <div v-else-if="tvMode === 'image'" class="image-display">
         <img :src="resolveMediaUrl(currentImageUrl)" class="tv-image" alt="Image affichée" />
+      </div>
+
+      <!-- Map mode -->
+      <div v-else-if="tvMode === 'map' && currentMapUrl" ref="mapContainerRef" class="map-display">
+        <!-- Layer 1: map image -->
+        <img
+          :src="resolveMediaUrl(currentMapUrl)"
+          class="map-image"
+          :style="{
+            transform: `translate(${mapViewport.x}px, ${mapViewport.y}px) scale(${mapViewport.scale})`,
+            transformOrigin: '0 0',
+          }"
+          alt="Carte"
+        />
+        <!-- Layer 2: fog of war canvas -->
+        <canvas ref="mapFogCanvas" class="map-fog-canvas" />
+        <!-- Layer 3: player tokens -->
+        <div class="map-tokens">
+          <div
+            v-for="player in players"
+            :key="player.id"
+            class="map-token"
+            :title="player.player_name"
+          >
+            <img v-if="player.avatar_url" :src="resolveMediaUrl(player.avatar_url)" :alt="player.player_name" class="token-avatar" />
+            <span v-else class="token-initial">{{ player.player_name?.[0]?.toUpperCase() || '?' }}</span>
+            <span class="token-name">{{ player.player_name }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- Merchant mode -->
@@ -1162,6 +1275,90 @@ onUnmounted(() => {
   max-height: 90vh;
   object-fit: contain;
   border-radius: 8px;
+}
+
+/* ── Map mode ─────────────────────────────────────────────────────────── */
+.map-display {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+.map-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  display: block;
+  z-index: 1;
+  will-change: transform;
+  user-select: none;
+  pointer-events: none;
+}
+.map-fog-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+.map-tokens {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 1rem;
+  gap: 0.75rem;
+  box-sizing: border-box;
+}
+.map-token {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+.token-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--color-gold-bright);
+  object-fit: cover;
+  box-shadow: 0 0 8px rgba(0,0,0,0.8);
+}
+.token-initial {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--surface-gold-soft);
+  border: 2px solid var(--color-gold-bright);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  color: var(--color-gold-bright);
+  box-shadow: 0 0 8px rgba(0,0,0,0.8);
+}
+.token-name {
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  color: #fff;
+  text-shadow: 0 1px 3px #000;
+  letter-spacing: 0.06em;
+  text-align: center;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Merchant mode ────────────────────────────────────────────────────── */

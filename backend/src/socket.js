@@ -11,6 +11,9 @@ const MIN_TENSION_STEPS = 2
 const MAX_TENSION_STEPS = 20
 const MAX_TITLE_LENGTH = 200
 const TENSION_DIRECTIONS = new Set(['ascending', 'descending'])
+const MAP_SCALE_MIN = 0.1
+const MAP_SCALE_MAX = 10
+const MAP_FOG_STROKES_MAX = 500
 
 function sanitizePlayerName(name) {
   return String(name || '').trim().replace(/\s+/g, ' ')
@@ -51,6 +54,26 @@ function serializeTensionScale(session) {
     level: Math.max(0, Math.min(steps, parseInt(session.tension_level) || 0)),
     direction,
     vibrationEnabled: !!session.tension_vibration,
+  }
+}
+
+function serializeMapState(session) {
+  if (!session?.current_map_url) return null
+  let viewport = { x: 0, y: 0, scale: 1 }
+  try {
+    const parsed = session.map_viewport ? JSON.parse(session.map_viewport) : null
+    if (parsed && typeof parsed.scale === 'number') viewport = parsed
+  } catch { /* use default */ }
+  let fogStrokes = []
+  try {
+    const parsed = session.map_fog_strokes ? JSON.parse(session.map_fog_strokes) : null
+    if (Array.isArray(parsed)) fogStrokes = parsed
+  } catch { /* use default */ }
+  return {
+    mapUrl: session.current_map_url,
+    fogEnabled: !!session.map_fog_enabled,
+    viewport,
+    fogStrokes,
   }
 }
 
@@ -358,6 +381,7 @@ function setupSocket(io) {
           activeMerchant: (session.current_merchant_id && session.tv_mode === 'merchant')
             ? await getMerchantData(session.current_merchant_id)
             : null,
+          mapState: serializeMapState(session),
         })
       } catch (err) { console.error(err) }
     })
@@ -395,6 +419,7 @@ function setupSocket(io) {
           activeMerchant: (session.current_merchant_id && session.tv_mode === 'merchant')
             ? await getMerchantData(session.current_merchant_id)
             : null,
+          mapState: serializeMapState(session),
         })
       } catch (err) { console.error(err) }
     })
@@ -602,6 +627,95 @@ function setupSocket(io) {
         await pool.query('UPDATE sessions SET tv_mode = $1, current_image_url = $2 WHERE id = $3 AND created_by = $4', ['image', imageUrl, sessionId, socket.admin.id])
         io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'image', imageUrl })
         io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'image', imageUrl })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: show map on TV ───────────────────────────────────────────────
+    socket.on('show-map', async ({ sessionId, imageUrl }) => {
+      if (!socket.admin) return
+      try {
+        if (!imageUrl || typeof imageUrl !== 'string') return
+        const defaultViewport = JSON.stringify({ x: 0, y: 0, scale: 1 })
+        await pool.query(
+          `UPDATE sessions
+           SET tv_mode = 'map', current_map_url = $1, map_fog_enabled = FALSE,
+               map_viewport = $2, map_fog_strokes = '[]'
+           WHERE id = $3 AND created_by = $4`,
+          [imageUrl, defaultViewport, sessionId, socket.admin.id]
+        )
+        const mapState = { mapUrl: imageUrl, fogEnabled: false, viewport: { x: 0, y: 0, scale: 1 }, fogStrokes: [] }
+        io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'map' })
+        io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'map' })
+        io.to(`tv:${sessionId}`).emit('map-state', mapState)
+        io.to(`admin:${sessionId}`).emit('map-state', mapState)
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: toggle map fog ───────────────────────────────────────────────
+    socket.on('map-set-fog', async ({ sessionId, enabled }) => {
+      if (!socket.admin) return
+      try {
+        await pool.query(
+          'UPDATE sessions SET map_fog_enabled = $1 WHERE id = $2 AND created_by = $3',
+          [!!enabled, sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('map-fog-updated', { enabled: !!enabled })
+        io.to(`admin:${sessionId}`).emit('map-fog-updated', { enabled: !!enabled })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: update map viewport ──────────────────────────────────────────
+    socket.on('map-viewport-update', async ({ sessionId, x, y, scale }) => {
+      if (!socket.admin) return
+      try {
+        const safeScale = Math.max(MAP_SCALE_MIN, Math.min(MAP_SCALE_MAX, Number(scale) || 1))
+        const safeX = Number(x) || 0
+        const safeY = Number(y) || 0
+        const viewport = JSON.stringify({ x: safeX, y: safeY, scale: safeScale })
+        await pool.query(
+          'UPDATE sessions SET map_viewport = $1 WHERE id = $2 AND created_by = $3',
+          [viewport, sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('map-viewport-changed', { x: safeX, y: safeY, scale: safeScale })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: reveal fog strokes ───────────────────────────────────────────
+    socket.on('map-fog-clear', async ({ sessionId, strokes }) => {
+      if (!socket.admin) return
+      try {
+        if (!Array.isArray(strokes) || strokes.length === 0) return
+        const sessionRes = await pool.query(
+          'SELECT map_fog_strokes FROM sessions WHERE id = $1 AND created_by = $2',
+          [sessionId, socket.admin.id]
+        )
+        if (!sessionRes.rows[0]) return
+        let existing = []
+        try {
+          const raw = sessionRes.rows[0].map_fog_strokes
+          existing = raw ? JSON.parse(raw) : []
+          if (!Array.isArray(existing)) existing = []
+        } catch { existing = [] }
+        const combined = [...existing, ...strokes].slice(-MAP_FOG_STROKES_MAX)
+        await pool.query(
+          'UPDATE sessions SET map_fog_strokes = $1 WHERE id = $2 AND created_by = $3',
+          [JSON.stringify(combined), sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('map-fog-patch', { strokes })
+        io.to(`admin:${sessionId}`).emit('map-fog-patch', { strokes })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: reset fog (re-cover entire map) ──────────────────────────────
+    socket.on('map-fog-reset', async ({ sessionId }) => {
+      if (!socket.admin) return
+      try {
+        await pool.query(
+          "UPDATE sessions SET map_fog_strokes = '[]' WHERE id = $1 AND created_by = $2",
+          [sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('map-fog-reset')
+        io.to(`admin:${sessionId}`).emit('map-fog-reset')
       } catch (err) { console.error(err) }
     })
 
