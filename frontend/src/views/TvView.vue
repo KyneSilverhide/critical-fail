@@ -38,17 +38,15 @@ const mapFogStrokes = ref([])
 const mapFogCanvas = ref(null)
 const mapContainerRef = ref(null)
 const mapImageSize = ref({ w: 0, h: 0 })
+const mapTokens = ref({})  // { [playerId]: { nx, ny } }
 
 const mapImageStyle = computed(() => {
   const container = mapContainerRef.value
   if (!container) return {}
   const W = container.offsetWidth || 1920
   const H = container.offsetHeight || 1080
-
-  // On a besoin des dimensions naturelles — on les récupère du DOM
   const natW = mapImageSize.value.w || 1920
   const natH = mapImageSize.value.h || 1080
-
   const vp = mapViewport.value
   const baseScale = Math.min(W / natW, H / natH)
   const totalScale = baseScale * vp.scale
@@ -56,7 +54,6 @@ const mapImageStyle = computed(() => {
   const imgH = natH * totalScale
   const offsetX = W / 2 - imgW / 2 + (vp.xn * natW * baseScale)
   const offsetY = H / 2 - imgH / 2 + (vp.yn * natH * baseScale)
-
   return {
     position: 'absolute',
     left: `${offsetX}px`,
@@ -67,6 +64,34 @@ const mapImageStyle = computed(() => {
     transformOrigin: undefined,
   }
 })
+
+// Positions des jetons calculées avec le même layout que l'image
+const mapTokenStyles = computed(() => {
+  const result = {}
+  const container = mapContainerRef.value
+  if (!container || !mapImageSize.value.w) return result
+  const W = container.offsetWidth || 1920
+  const H = container.offsetHeight || 1080
+  const natW = mapImageSize.value.w
+  const natH = mapImageSize.value.h
+  const vp = mapViewport.value
+  const baseScale = Math.min(W / natW, H / natH)
+  const totalScale = baseScale * vp.scale
+  const imgW = natW * totalScale
+  const imgH = natH * totalScale
+  const offsetX = W / 2 - imgW / 2 + (vp.xn * natW * baseScale)
+  const offsetY = H / 2 - imgH / 2 + (vp.yn * natH * baseScale)
+  for (const [pid, pos] of Object.entries(mapTokens.value)) {
+    const tx = offsetX + pos.nx * natW * totalScale
+    const ty = offsetY + pos.ny * natH * totalScale
+    result[pid] = { left: `${tx}px`, top: `${ty}px` }
+  }
+  return result
+})
+
+function getPlayerById(playerId) {
+  return players.value.find(p => String(p.id) === String(playerId)) || null
+}
 
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
@@ -139,7 +164,6 @@ function renderMapFog() {
 
 function applyMapState(data) {
   if (!data) return
-  // Réinitialiser la taille si l'image change
   if (data.mapUrl !== currentMapUrl.value) {
     mapImageSize.value = { w: 0, h: 0 }
   }
@@ -151,6 +175,7 @@ function applyMapState(data) {
     scale: data.viewport?.scale ?? 1,
   }
   mapFogStrokes.value = Array.isArray(data.fogStrokes) ? data.fogStrokes : []
+  mapTokens.value = (data.mapTokens && typeof data.mapTokens === 'object') ? data.mapTokens : {}
   nextTick(renderMapFog)
 }
 
@@ -412,6 +437,16 @@ onMounted(() => {
     renderMapFog()
   })
 
+  socket.on('map-token-moved', ({ playerId, nx, ny }) => {
+    mapTokens.value = { ...mapTokens.value, [String(playerId)]: { nx, ny } }
+  })
+
+  socket.on('map-token-removed', ({ playerId }) => {
+    const next = { ...mapTokens.value }
+    delete next[String(playerId)]
+    mapTokens.value = next
+  })
+
   window.addEventListener('resize', renderMapFog)
 })
 
@@ -606,20 +641,29 @@ onUnmounted(() => {
       <!-- Map mode -->
       <div v-else-if="tvMode === 'map' && currentMapUrl" ref="mapContainerRef" class="map-display">
         <!-- Layer 1: map image -->
-        <img  :src="resolveMediaUrl(currentMapUrl)"  class="map-image"  :style="mapImageStyle"  alt="Carte"  @load="onMapImageLoad"/>
+        <img :src="resolveMediaUrl(currentMapUrl)" class="map-image" :style="mapImageStyle" alt="Carte" @load="onMapImageLoad" />
         <!-- Layer 2: fog of war canvas -->
         <canvas ref="mapFogCanvas" class="map-fog-canvas" />
-        <!-- Layer 3: player tokens -->
-        <div class="map-tokens">
+        <!-- Layer 3: player tokens — toujours au-dessus du brouillard -->
+        <div class="map-tokens-layer">
           <div
-            v-for="player in players"
-            :key="player.id"
-            class="map-token"
-            :title="player.player_name"
+            v-for="(tokenPos, pid) in mapTokens"
+            :key="pid"
+            class="map-token-placed"
+            :style="mapTokenStyles[pid]"
           >
-            <img v-if="player.avatar_url" :src="resolveMediaUrl(player.avatar_url)" :alt="player.player_name" class="token-avatar" />
-            <span v-else class="token-initial">{{ player.player_name?.[0]?.toUpperCase() || '?' }}</span>
-            <span class="token-name">{{ player.player_name }}</span>
+            <div class="token-circle">
+              <img
+                v-if="getPlayerById(pid)?.avatar_url"
+                :src="resolveMediaUrl(getPlayerById(pid).avatar_url)"
+                :alt="getPlayerById(pid)?.player_name"
+                class="token-avatar-img"
+              />
+              <span v-else class="token-initial-letter">
+                {{ getPlayerById(pid)?.player_name?.[0]?.toUpperCase() || '?' }}
+              </span>
+            </div>
+            <span class="token-label">{{ getPlayerById(pid)?.player_name || '' }}</span>
           </div>
         </div>
       </div>
@@ -1351,61 +1395,53 @@ onUnmounted(() => {
   z-index: 2;
   pointer-events: none;
 }
-.map-tokens {
+/* ── Token layer ── */
+.map-tokens-layer {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
   z-index: 3;
   pointer-events: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: flex-start;
-  padding: 1rem;
-  gap: 0.75rem;
-  box-sizing: border-box;
 }
-.map-token {
+.map-token-placed {
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.25rem;
+  gap: 5px;
+  transform: translate(-50%, -50%);
 }
-.token-avatar {
-  width: 48px;
-  height: 48px;
+.token-circle {
+  width: 56px; height: 56px;
   border-radius: 50%;
-  border: 2px solid var(--color-gold-bright);
-  object-fit: cover;
-  box-shadow: 0 0 8px rgba(0,0,0,0.8);
+  border: 3px solid #c9a227;
+  overflow: hidden;
+  background: #1a1230;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 14px rgba(0,0,0,0.9), 0 0 8px rgba(201,162,39,0.5);
+  flex-shrink: 0;
 }
-.token-initial {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--surface-gold-soft);
-  border: 2px solid var(--color-gold-bright);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-heading);
-  font-size: 1.2rem;
-  color: var(--color-gold-bright);
-  box-shadow: 0 0 8px rgba(0,0,0,0.8);
+.token-avatar-img {
+  width: 100%; height: 100%; object-fit: cover;
 }
-.token-name {
+.token-initial-letter {
   font-family: var(--font-heading);
-  font-size: 0.6rem;
+  font-size: 1.6rem;
+  color: #c9a227;
+  font-weight: 700;
+  line-height: 1;
+}
+.token-label {
+  font-family: var(--font-heading);
+  font-size: clamp(0.6rem, 1.2vw, 0.85rem);
   color: #fff;
-  text-shadow: 0 1px 3px #000;
+  text-shadow: 0 1px 4px #000, 0 0 8px #000;
   letter-spacing: 0.06em;
   text-align: center;
-  max-width: 64px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  background: rgba(0,0,0,0.55);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 /* ── Merchant mode ────────────────────────────────────────────────────── */

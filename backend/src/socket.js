@@ -75,11 +75,17 @@ function serializeMapState(session) {
     const parsed = session.map_fog_strokes ? JSON.parse(session.map_fog_strokes) : null
     if (Array.isArray(parsed)) fogStrokes = parsed
   } catch { /* use default */ }
+  let mapTokens = {}
+  try {
+    const parsed = session.map_tokens ? JSON.parse(session.map_tokens) : null
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) mapTokens = parsed
+  } catch { /* use default */ }
   return {
     mapUrl: session.current_map_url,
     fogEnabled: !!session.map_fog_enabled,
     viewport,
     fogStrokes,
+    mapTokens,
   }
 }
 
@@ -645,11 +651,11 @@ function setupSocket(io) {
         await pool.query(
           `UPDATE sessions
            SET tv_mode = 'map', current_map_url = $1, map_fog_enabled = FALSE,
-               map_viewport = $2, map_fog_strokes = '[]'
+               map_viewport = $2, map_fog_strokes = '[]', map_tokens = '{}'
            WHERE id = $3 AND created_by = $4`,
           [imageUrl, defaultViewport, sessionId, socket.admin.id]
         )
-        const mapState = { mapUrl: imageUrl, fogEnabled: false, viewport: { xn: 0, yn: 0, scale: 1 }, fogStrokes: [] }
+        const mapState = { mapUrl: imageUrl, fogEnabled: false, viewport: { xn: 0, yn: 0, scale: 1 }, fogStrokes: [], mapTokens: {} }
         io.to(`tv:${sessionId}`).emit('tv-mode-changed', { mode: 'map' })
         io.to(`admin:${sessionId}`).emit('tv-mode-changed', { mode: 'map' })
         io.to(`tv:${sessionId}`).emit('map-state', mapState)
@@ -722,6 +728,48 @@ function setupSocket(io) {
         )
         io.to(`tv:${sessionId}`).emit('map-fog-reset')
         io.to(`admin:${sessionId}`).emit('map-fog-reset')
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: move player token on map ─────────────────────────────────────
+    socket.on('map-token-move', async ({ sessionId, playerId, nx, ny }) => {
+      if (!socket.admin) return
+      try {
+        const sessionRes = await pool.query(
+          'SELECT map_tokens FROM sessions WHERE id = $1 AND created_by = $2',
+          [sessionId, socket.admin.id]
+        )
+        if (!sessionRes.rows[0]) return
+        let tokens = {}
+        try { tokens = JSON.parse(sessionRes.rows[0].map_tokens || '{}') } catch {}
+        tokens[String(playerId)] = { nx: Number(nx) || 0, ny: Number(ny) || 0 }
+        await pool.query(
+          'UPDATE sessions SET map_tokens = $1 WHERE id = $2 AND created_by = $3',
+          [JSON.stringify(tokens), sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('map-token-moved', { playerId, nx: tokens[String(playerId)].nx, ny: tokens[String(playerId)].ny })
+        io.to(`admin:${sessionId}`).emit('map-token-moved', { playerId, nx: tokens[String(playerId)].nx, ny: tokens[String(playerId)].ny })
+      } catch (err) { console.error(err) }
+    })
+
+    // ── Admin: remove player token from map ─────────────────────────────────
+    socket.on('map-token-remove', async ({ sessionId, playerId }) => {
+      if (!socket.admin) return
+      try {
+        const sessionRes = await pool.query(
+          'SELECT map_tokens FROM sessions WHERE id = $1 AND created_by = $2',
+          [sessionId, socket.admin.id]
+        )
+        if (!sessionRes.rows[0]) return
+        let tokens = {}
+        try { tokens = JSON.parse(sessionRes.rows[0].map_tokens || '{}') } catch {}
+        delete tokens[String(playerId)]
+        await pool.query(
+          'UPDATE sessions SET map_tokens = $1 WHERE id = $2 AND created_by = $3',
+          [JSON.stringify(tokens), sessionId, socket.admin.id]
+        )
+        io.to(`tv:${sessionId}`).emit('map-token-removed', { playerId })
+        io.to(`admin:${sessionId}`).emit('map-token-removed', { playerId })
       } catch (err) { console.error(err) }
     })
 

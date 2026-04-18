@@ -9,6 +9,7 @@ const MAX_BRUSH_RADIUS = 100
 const MIN_BRUSH_RADIUS = 5
 const DEFAULT_BRUSH_RADIUS = 30
 const VIEWPORT_DEBOUNCE_MS = 150
+const TOKEN_RADIUS = 26  // px canvas
 
 // ── State ──────────────────────────────────────────────────────────────────
 const images = ref([])
@@ -20,10 +21,9 @@ const uploadProgress = ref(0)
 const isMapActive = ref(false)
 const fogEnabled = ref(false)
 const viewport = ref({ x: 0, y: 0, scale: 1 })
-// Strokes: normalized coords { nx, ny, nr } — all relative to image natural width
-const fogStrokes = ref([])
+const fogStrokes = ref([])  // { nx, ny, nr, cover? }
+const mapTokens = ref({})   // { [playerId]: { nx, ny } }
 
-const brushMode = ref(false)
 const brushRadius = ref(DEFAULT_BRUSH_RADIUS)
 
 // canvas refs
@@ -31,17 +31,24 @@ const canvasEl = ref(null)
 const canvasContainer = ref(null)
 
 // non-reactive internals
-let mapImage = null          // HTMLImageElement
-let fogCanvas = null         // offscreen canvas at natural image resolution
+let mapImage = null
+let fogCanvas = null
+let fogMask = null  // canvas binaire : blanc = couvert, transparent = révélé
 let resizeObserver = null
 let viewportDebounceTimer = null
-let pendingNormViewport = null  // normalized viewport waiting for image to load
+let pendingNormViewport = null
+const avatarCache = {}   // { [playerId]: HTMLImageElement | 'loading' | 'error' }
 
 // interaction state
 let isPainting = false
 const isDragging = ref(false)
 let dragStart = null
 let dragViewportStart = null
+let draggingTokenId = null   // playerId en cours de drag
+let tokenDragThrottleFrame = null
+
+// placement en attente depuis la barre de jetons
+const pendingTokenPlayerId = ref(null)
 
 // ── Images ─────────────────────────────────────────────────────────────────
 async function loadImages() {
@@ -51,9 +58,7 @@ async function loadImages() {
       headers: { Authorization: `Bearer ${authStore.token}` },
     })
     if (res.ok) images.value = await res.json()
-  } catch (err) {
-    console.error(err)
-  }
+  } catch (err) { console.error(err) }
 }
 
 function handleFileUpload(event) {
@@ -111,7 +116,6 @@ function fitCanvas() {
   }
 }
 
-/** Returns image layout on canvas given current viewport */
 function getLayout() {
   const canvas = canvasEl.value
   if (!canvas || !mapImage) return null
@@ -127,66 +131,171 @@ function getLayout() {
   return { offsetX, offsetY, imgW, imgH, totalScale }
 }
 
-// ── Fog canvas (offscreen, at natural image resolution) ────────────────────
+// ── Fog canvas ─────────────────────────────────────────────────────────────
 function ensureFogCanvas() {
   if (!mapImage) return null
-  if (!fogCanvas || fogCanvas.width !== mapImage.naturalWidth || fogCanvas.height !== mapImage.naturalHeight) {
+  const w = mapImage.naturalWidth
+  const h = mapImage.naturalHeight
+  if (!fogCanvas || fogCanvas.width !== w || fogCanvas.height !== h) {
     fogCanvas = document.createElement('canvas')
-    fogCanvas.width = mapImage.naturalWidth
-    fogCanvas.height = mapImage.naturalHeight
+    fogCanvas.width = w
+    fogCanvas.height = h
+    fogMask = document.createElement('canvas')
+    fogMask.width = w
+    fogMask.height = h
     rebuildFogCanvas()
   }
   return fogCanvas
 }
 
+function rebuildFogMask() {
+  if (!fogMask || !mapImage) return
+  const mCtx = fogMask.getContext('2d')
+  const w = fogMask.width
+  const h = fogMask.height
+  mCtx.clearRect(0, 0, w, h)
+  mCtx.fillStyle = '#fff'
+  mCtx.fillRect(0, 0, w, h)
+  mCtx.globalCompositeOperation = 'destination-out'
+  mCtx.fillStyle = '#000'
+  for (const s of fogStrokes.value) {
+    mCtx.beginPath()
+    mCtx.arc(s.nx * w, s.ny * h, s.nr * w, 0, Math.PI * 2)
+    mCtx.fill()
+  }
+  mCtx.globalCompositeOperation = 'source-over'
+}
+
 function rebuildFogCanvas() {
+  ensureFogCanvas()
   if (!fogCanvas || !mapImage) return
+  rebuildFogMask()
+  renderFogFromMask()
+}
+
+function renderFogFromMask() {
+  if (!fogCanvas || !fogMask) return
   const fCtx = fogCanvas.getContext('2d')
-  fCtx.clearRect(0, 0, fogCanvas.width, fogCanvas.height)
+  const w = fogCanvas.width
+  const h = fogCanvas.height
+  fCtx.clearRect(0, 0, w, h)
 
-  // Fond de brouillard semi-transparent teinté (le MJ voit à travers)
+  // 1) Dessiner la teinte semi-transparente sur tout le canvas
   fCtx.globalCompositeOperation = 'source-over'
-  fCtx.fillStyle = 'rgba(30, 20, 60, 0.45)'
-  fCtx.fillRect(0, 0, fogCanvas.width, fogCanvas.height)
+  fCtx.fillStyle = 'rgba(30, 20, 60, 0.22)'
+  fCtx.fillRect(0, 0, w, h)
 
-  // Quadrillage diagonal pour marquer visuellement les zones couvertes
-  fCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)'
+  // 2) Dessiner les hachures
+  fCtx.strokeStyle = 'rgba(180, 140, 255, 0.18)'
   fCtx.lineWidth = 2
-  const step = 40
-  for (let i = -fogCanvas.height; i < fogCanvas.width; i += step) {
+  const step = 36
+  for (let i = -h; i < w + h; i += step) {
     fCtx.beginPath()
     fCtx.moveTo(i, 0)
-    fCtx.lineTo(i + fogCanvas.height, fogCanvas.height)
+    fCtx.lineTo(i + h, h)
     fCtx.stroke()
   }
 
-  // Découper les zones révélées
-  fCtx.globalCompositeOperation = 'destination-out'
-  for (const s of fogStrokes.value) {
-    paintStrokeOnFog(fCtx, s)
-  }
-  fCtx.globalCompositeOperation = 'source-over'
-}
+  // 3) Masquer (effacer) les zones révélées — là où le mask est transparent
+  //    On veut garder le fog UNIQUEMENT là où le mask est opaque.
+  //    → destination-in : garde les pixels du fog là où le mask est opaque
+  fCtx.globalCompositeOperation = 'destination-in'
+  fCtx.drawImage(fogMask, 0, 0)
 
-function paintStrokeOnFog(fCtx, s) {
-  if (!mapImage) return
-  fCtx.beginPath()
-  fCtx.arc(
-    s.nx * mapImage.naturalWidth,
-    s.ny * mapImage.naturalHeight,
-    s.nr * mapImage.naturalWidth,
-    0, Math.PI * 2
-  )
-  fCtx.fill()
+  fCtx.globalCompositeOperation = 'source-over'
 }
 
 function addStrokeToFog(stroke) {
-  const fc = ensureFogCanvas()
-  if (!fc) return
-  const fCtx = fc.getContext('2d')
-  fCtx.globalCompositeOperation = 'destination-out'
-  paintStrokeOnFog(fCtx, stroke)
-  fCtx.globalCompositeOperation = 'source-over'
+  if (!fogMask || !mapImage) {
+    ensureFogCanvas()
+    if (!fogMask || !mapImage) return
+  }
+  const mCtx = fogMask.getContext('2d')
+  mCtx.globalCompositeOperation = 'destination-out'
+  mCtx.fillStyle = '#000'
+  mCtx.beginPath()
+  mCtx.arc(stroke.nx * fogMask.width, stroke.ny * fogMask.height, stroke.nr * fogMask.width, 0, Math.PI * 2)
+  mCtx.fill()
+  mCtx.globalCompositeOperation = 'source-over'
+  renderFogFromMask()
+}
+
+// ── Token helpers ──────────────────────────────────────────────────────────
+function preloadAvatar(player) {
+  const pid = String(player.id)
+  if (avatarCache[pid] || !player.avatar_url) return
+  avatarCache[pid] = 'loading'
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => { avatarCache[pid] = img; render() }
+  img.onerror = () => { avatarCache[pid] = 'error' }
+  img.src = imageFullUrl(player.avatar_url)
+}
+
+function getTokenAtPos(pos) {
+  const layout = getLayout()
+  if (!layout || !mapImage) return null
+  for (const [pid, tokenPos] of Object.entries(mapTokens.value)) {
+    const tx = layout.offsetX + tokenPos.nx * mapImage.naturalWidth * layout.totalScale
+    const ty = layout.offsetY + tokenPos.ny * mapImage.naturalHeight * layout.totalScale
+    const dx = pos.x - tx
+    const dy = pos.y - ty
+    if (Math.sqrt(dx * dx + dy * dy) <= TOKEN_RADIUS + 4) return pid
+  }
+  return null
+}
+
+function drawToken(ctx, pid, tokenPos, layout) {
+  if (!mapImage) return
+  const { offsetX, offsetY, totalScale } = layout
+  const tx = offsetX + tokenPos.nx * mapImage.naturalWidth * totalScale
+  const ty = offsetY + tokenPos.ny * mapImage.naturalHeight * totalScale
+  const player = sessionStore.players.find(p => String(p.id) === pid)
+  const name = player?.player_name || '?'
+
+  preloadAvatar(player || {})
+
+  // Cercle de fond
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(tx, ty, TOKEN_RADIUS, 0, Math.PI * 2)
+  ctx.fillStyle = '#1a1230'
+  ctx.fill()
+  ctx.strokeStyle = '#c9a227'
+  ctx.lineWidth = 2.5
+  ctx.stroke()
+  ctx.restore()
+
+  // Avatar ou initiale
+  const cachedImg = avatarCache[pid]
+  if (cachedImg instanceof HTMLImageElement) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(tx, ty, TOKEN_RADIUS - 1, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.drawImage(cachedImg, tx - TOKEN_RADIUS + 1, ty - TOKEN_RADIUS + 1, (TOKEN_RADIUS - 1) * 2, (TOKEN_RADIUS - 1) * 2)
+    ctx.restore()
+  } else {
+    ctx.save()
+    ctx.font = `bold ${TOKEN_RADIUS}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#c9a227'
+    ctx.fillText(name[0]?.toUpperCase() || '?', tx, ty)
+    ctx.restore()
+  }
+
+  // Nom sous le jeton
+  ctx.save()
+  ctx.font = 'bold 11px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.lineWidth = 3
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)'
+  ctx.strokeText(name, tx, ty + TOKEN_RADIUS + 3)
+  ctx.fillStyle = '#fff'
+  ctx.fillText(name, tx, ty + TOKEN_RADIUS + 3)
+  ctx.restore()
 }
 
 // ── Main render ────────────────────────────────────────────────────────────
@@ -205,10 +314,15 @@ function render() {
   // Image
   ctx.drawImage(mapImage, offsetX, offsetY, imgW, imgH)
 
-  // Fog overlay
+  // Fog overlay (semi-transparent MJ view)
   if (fogEnabled.value) {
     const fc = ensureFogCanvas()
     if (fc) ctx.drawImage(fc, offsetX, offsetY, imgW, imgH)
+  }
+
+  // Jetons — toujours au-dessus du brouillard
+  for (const [pid, tokenPos] of Object.entries(mapTokens.value)) {
+    drawToken(ctx, pid, tokenPos, layout)
   }
 }
 
@@ -221,7 +335,6 @@ function loadMapImage(url) {
     mapImage = img
     fogCanvas = null
     fitCanvas()
-    // Appliquer le viewport normalisé reçu avant que l'image soit chargée
     if (pendingNormViewport) {
       applyNormViewport(pendingNormViewport.xn, pendingNormViewport.yn, pendingNormViewport.scale)
       pendingNormViewport = null
@@ -231,6 +344,7 @@ function loadMapImage(url) {
   }
   img.src = imageFullUrl(url)
 }
+
 // ── Coordinate helpers ─────────────────────────────────────────────────────
 function getEventXY(event) {
   if (event.touches && event.touches.length > 0) {
@@ -264,40 +378,89 @@ function canvasToNorm(cx, cy) {
 
 // ── Interaction ────────────────────────────────────────────────────────────
 function onPointerDown(event) {
-  canvasEl.value?.setPointerCapture(event.pointerId)
   const pos = eventToCanvas(event)
   if (!pos) return
-  if (brushMode.value && fogEnabled.value) {
-    isPainting = true
-    applyBrush(pos)
-  } else {
+
+  // Bouton milieu → pan
+  if (event.button === 1) {
+    event.preventDefault()
+    canvasEl.value?.setPointerCapture(event.pointerId)
     isDragging.value = true
     const { cx, cy } = getEventXY(event)
     dragStart = { x: cx, y: cy }
     dragViewportStart = { ...viewport.value }
+    return
+  }
+
+  if (event.button !== 0) return
+  canvasEl.value?.setPointerCapture(event.pointerId)
+
+  // Mode placement de jeton en attente
+  if (pendingTokenPlayerId.value) {
+    const norm = canvasToNorm(pos.x, pos.y)
+    if (norm) placeToken(pendingTokenPlayerId.value, norm.nx, norm.ny)
+    pendingTokenPlayerId.value = null
+    return
+  }
+
+  // Drag d'un jeton existant
+  const tokenUnderCursor = getTokenAtPos(pos)
+  if (tokenUnderCursor) {
+    draggingTokenId = tokenUnderCursor
+    return
+  }
+
+  // Clic gauche : pinceau brouillard
+  if (fogEnabled.value) {
+    isPainting = true
+    applyBrush(pos)
   }
 }
 
 function onPointerMove(event) {
   const pos = eventToCanvas(event)
   if (!pos) return
-  if (isPainting && brushMode.value && fogEnabled.value) {
-    applyBrush(pos)
-  } else if (isDragging.value) {
-  const { cx, cy } = getEventXY(event)
-  viewport.value = {
-    ...dragViewportStart,
-    x: dragViewportStart.x + (cx - dragStart.x),
-    y: dragViewportStart.y + (cy - dragStart.y),
+
+  if (draggingTokenId) {
+    const norm = canvasToNorm(pos.x, pos.y)
+    if (norm) {
+      mapTokens.value = { ...mapTokens.value, [draggingTokenId]: { nx: norm.nx, ny: norm.ny } }
+      if (tokenDragThrottleFrame) cancelAnimationFrame(tokenDragThrottleFrame)
+      tokenDragThrottleFrame = requestAnimationFrame(render)
+    }
+    return
   }
-  scheduleViewportEmit()
-  render()
-}
+
+  if (isPainting && fogEnabled.value) {
+    applyBrush(pos)
+    return
+  }
+
+  if (isDragging.value) {
+    const { cx, cy } = getEventXY(event)
+    viewport.value = {
+      ...dragViewportStart,
+      x: dragViewportStart.x + (cx - dragStart.x),
+      y: dragViewportStart.y + (cy - dragStart.y),
+    }
+    scheduleViewportEmit()
+    render()
+  }
 }
 
-function onPointerUp() {
+function onPointerUp(event) {
+  if (draggingTokenId) {
+    const tokenPos = mapTokens.value[draggingTokenId]
+    if (tokenPos) emitTokenMove(draggingTokenId, tokenPos.nx, tokenPos.ny)
+    draggingTokenId = null
+    return
+  }
   isPainting = false
   isDragging.value = false
+}
+
+function onContextMenu(event) {
+  event.preventDefault()
 }
 
 function onWheel(event) {
@@ -316,17 +479,42 @@ function applyBrush(pos) {
   if (!norm) return
   const layout = getLayout()
   if (!layout) return
-  // nr = brush radius in canvas px / image width in canvas px → normalized radius
   const nr = brushRadius.value / layout.imgW
   const stroke = { nx: norm.nx, ny: norm.ny, nr }
   fogStrokes.value.push(stroke)
   addStrokeToFog(stroke)
   render()
   const socket = getSocket()
-  socket.emit('map-fog-clear', {
-    sessionId: sessionStore.activeSession.id,
-    strokes: [stroke],
-  })
+  socket.emit('map-fog-clear', { sessionId: sessionStore.activeSession.id, strokes: [stroke] })
+}
+
+// ── Token actions ──────────────────────────────────────────────────────────
+function placeToken(playerId, nx, ny) {
+  mapTokens.value = { ...mapTokens.value, [String(playerId)]: { nx, ny } }
+  emitTokenMove(playerId, nx, ny)
+  render()
+}
+
+function removeToken(playerId) {
+  const next = { ...mapTokens.value }
+  delete next[String(playerId)]
+  mapTokens.value = next
+  const socket = getSocket()
+  socket.emit('map-token-remove', { sessionId: sessionStore.activeSession.id, playerId })
+  render()
+}
+
+function emitTokenMove(playerId, nx, ny) {
+  const socket = getSocket()
+  socket.emit('map-token-move', { sessionId: sessionStore.activeSession.id, playerId, nx, ny })
+}
+
+function toggleTokenPlacement(playerId) {
+  if (mapTokens.value[String(playerId)]) {
+    removeToken(playerId)
+  } else {
+    pendingTokenPlayerId.value = String(playerId) === pendingTokenPlayerId.value ? null : String(playerId)
+  }
 }
 
 // ── Socket actions ─────────────────────────────────────────────────────────
@@ -363,14 +551,12 @@ function scheduleViewportEmit() {
   viewportDebounceTimer = setTimeout(emitViewport, VIEWPORT_DEBOUNCE_MS)
 }
 
-/** Retourne baseScale de l'image sur le canvas courant */
 function getBaseScale() {
   const canvas = canvasEl.value
   if (!canvas || !mapImage) return 1
   return Math.min(canvas.width / mapImage.naturalWidth, canvas.height / mapImage.naturalHeight)
 }
 
-/** Convertit viewport local (pixels canvas) → normalisé pour émission */
 function toNormViewport() {
   const bs = getBaseScale()
   const baseW = mapImage.naturalWidth * bs
@@ -382,7 +568,6 @@ function toNormViewport() {
   }
 }
 
-/** Applique un viewport normalisé reçu → pixels locaux */
 function applyNormViewport(xn, yn, scale) {
   if (!mapImage || !canvasEl.value) {
     pendingNormViewport = { xn: xn ?? 0, yn: yn ?? 0, scale: scale ?? 1 }
@@ -419,13 +604,14 @@ function handleMapState(data) {
   if (!data) return
   isMapActive.value = true
   fogEnabled.value = data.fogEnabled
-  // Support ancien format {x,y} ET nouveau format normalisé {xn,yn}
   const xn = data.viewport?.xn ?? (data.viewport?.x ?? 0)
   const yn = data.viewport?.yn ?? (data.viewport?.y ?? 0)
   const scale = data.viewport?.scale ?? 1
   applyNormViewport(xn, yn, scale)
   fogStrokes.value = Array.isArray(data.fogStrokes) ? data.fogStrokes : []
+  mapTokens.value = (data.mapTokens && typeof data.mapTokens === 'object') ? data.mapTokens : {}
   fogCanvas = null
+  fogMask = null
   const newUrl = data.mapUrl
   if (newUrl !== selectedImageUrl.value) {
     selectedImageUrl.value = newUrl
@@ -457,6 +643,18 @@ function handleFogReset() {
   render()
 }
 
+function handleMapTokenMoved({ playerId, nx, ny }) {
+  mapTokens.value = { ...mapTokens.value, [String(playerId)]: { nx, ny } }
+  render()
+}
+
+function handleMapTokenRemoved({ playerId }) {
+  const next = { ...mapTokens.value }
+  delete next[String(playerId)]
+  mapTokens.value = next
+  render()
+}
+
 function handleAdminState(data) {
   if (sessionStore.activeSession?.id !== data.sessionId) return
   if (data.tvMode === 'map' && data.mapState) handleMapState(data.mapState)
@@ -481,6 +679,8 @@ onMounted(() => {
   socket.on('map-fog-updated', handleFogUpdated)
   socket.on('map-fog-patch', handleFogPatch)
   socket.on('map-fog-reset', handleFogReset)
+  socket.on('map-token-moved', handleMapTokenMoved)
+  socket.on('map-token-removed', handleMapTokenRemoved)
   socket.on('admin-state', handleAdminState)
   socket.on('tv-mode-changed', handleTvModeChanged)
 })
@@ -493,6 +693,8 @@ onUnmounted(() => {
   socket.off('map-fog-updated', handleFogUpdated)
   socket.off('map-fog-patch', handleFogPatch)
   socket.off('map-fog-reset', handleFogReset)
+  socket.off('map-token-moved', handleMapTokenMoved)
+  socket.off('map-token-removed', handleMapTokenRemoved)
   socket.off('admin-state', handleAdminState)
   socket.off('tv-mode-changed', handleTvModeChanged)
 })
@@ -539,6 +741,8 @@ watch(fogEnabled, () => render())
 
     <!-- Map Controls -->
     <template v-if="isMapActive && selectedImageUrl">
+
+      <!-- Brouillard de guerre -->
       <div class="control-section">
         <h4 class="subsection-title">🌫️ Brouillard de guerre</h4>
         <div class="inline-actions">
@@ -551,16 +755,43 @@ watch(fogEnabled, () => render())
         </div>
         <template v-if="fogEnabled">
           <div class="brush-controls">
+            <p class="hint-text">🖌️ Clic gauche pour révéler la carte</p>
             <label class="brush-label">
-              <input v-model="brushMode" type="checkbox" />
-              🖌️ Mode pinceau
-            </label>
-            <label v-if="brushMode" class="brush-label">
               Rayon : {{ brushRadius }}px
               <input v-model.number="brushRadius" type="range" :min="MIN_BRUSH_RADIUS" :max="MAX_BRUSH_RADIUS" class="brush-slider" />
             </label>
           </div>
         </template>
+      </div>
+
+      <!-- Jetons de joueurs -->
+      <div class="control-section">
+        <h4 class="subsection-title">🧙 Jetons de joueurs</h4>
+        <p v-if="sessionStore.players.length === 0" class="hint-text">Aucun joueur connecté.</p>
+        <div v-else class="token-tray">
+          <div
+            v-for="player in sessionStore.players"
+            :key="player.id"
+            class="token-chip"
+            :class="{
+              placed: !!mapTokens[String(player.id)],
+              pending: pendingTokenPlayerId === String(player.id),
+            }"
+            :title="mapTokens[String(player.id)] ? 'Cliquer pour retirer de la carte' : 'Cliquer pour placer sur la carte'"
+            @click="toggleTokenPlacement(player.id)"
+          >
+            <div class="chip-avatar">
+              <img v-if="player.avatar_url" :src="imageFullUrl(player.avatar_url)" :alt="player.player_name" class="chip-img" />
+              <span v-else class="chip-initial">{{ player.player_name?.[0]?.toUpperCase() || '?' }}</span>
+            </div>
+            <span class="chip-name">{{ player.player_name }}</span>
+            <span v-if="mapTokens[String(player.id)]" class="chip-badge">✓</span>
+            <span v-else-if="pendingTokenPlayerId === String(player.id)" class="chip-badge pending-badge">📍</span>
+          </div>
+        </div>
+        <p v-if="pendingTokenPlayerId" class="hint-text placement-hint">
+          📍 Cliquez sur la carte pour placer le jeton
+        </p>
       </div>
 
       <!-- Viewport Controls -->
@@ -576,16 +807,16 @@ watch(fogEnabled, () => render())
         </div>
       </div>
 
-      <!-- Unified canvas — image + fog + viewport -->
+      <!-- Canvas -->
       <div class="control-section">
         <h4 class="subsection-title">👁️ Vue TV en temps réel</h4>
         <p class="hint-text">
-          {{ brushMode && fogEnabled ? '🖌️ Glissez pour révéler la carte.' : '↕ Glissez pour naviguer · molette pour zoomer' }}
+          {{ pendingTokenPlayerId ? '📍 Cliquez sur la carte pour placer le jeton' : fogEnabled ? '🖌️ Clic gauche pour révéler · Molette pour zoomer · Molette centrale pour naviguer' : '↕ Clic molette pour naviguer · molette pour zoomer' }}
         </p>
         <div
           ref="canvasContainer"
           class="canvas-container"
-          :style="{ cursor: brushMode && fogEnabled ? 'crosshair' : isDragging ? 'grabbing' : 'grab' }"
+          :style="{ cursor: pendingTokenPlayerId ? 'crosshair' : draggingTokenId ? 'grabbing' : isDragging ? 'grabbing' : 'default' }"
         >
           <canvas
             ref="canvasEl"
@@ -596,6 +827,7 @@ watch(fogEnabled, () => render())
             @pointerleave="onPointerUp"
             @pointercancel="onPointerUp"
             @wheel.prevent="onWheel"
+            @contextmenu.prevent
           />
         </div>
       </div>
@@ -703,11 +935,62 @@ watch(fogEnabled, () => render())
 .brush-controls { display: flex; flex-direction: column; gap: 0.4rem; }
 .brush-label { display: flex; align-items: center; gap: 0.4rem; color: var(--color-text-dim); font-family: var(--font-heading); font-size: 0.7rem; }
 .brush-slider { flex: 1; accent-color: var(--color-gold); }
+kbd {
+  display: inline-block;
+  padding: 0.1em 0.35em;
+  background: var(--surface-raised, #222);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-family: monospace;
+  color: var(--color-text-dim);
+}
+
+/* ── Token tray ── */
+.token-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.token-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem 0.3rem 0.35rem;
+  background: var(--surface-raised, #1e1e2e);
+  border: 1.5px solid var(--color-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.token-chip:hover { border-color: var(--color-gold-dark); background: var(--surface-gold-soft); }
+.token-chip.placed { border-color: var(--color-gold-bright); background: var(--surface-gold-soft); }
+.token-chip.pending { border-color: #a78bfa; background: rgba(139,92,246,0.15); animation: pulse-pending 1s infinite; }
+@keyframes pulse-pending { 0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.4); } 50% { box-shadow: 0 0 0 4px rgba(139,92,246,0); } }
+
+.chip-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%; overflow: hidden;
+  border: 1.5px solid var(--color-gold-dark);
+  background: #111;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.chip-img { width: 100%; height: 100%; object-fit: cover; }
+.chip-initial { font-family: var(--font-heading); font-size: 0.75rem; color: var(--color-gold-dark); }
+.chip-name { font-family: var(--font-heading); font-size: 0.65rem; letter-spacing: 0.05em; color: var(--color-text-dim); }
+.chip-badge { font-size: 0.7rem; color: var(--color-gold-bright); font-weight: bold; }
+.pending-badge { color: #a78bfa; }
+
+.placement-hint {
+  color: #a78bfa !important;
+  font-style: italic;
+}
 
 .viewport-info { font-family: var(--font-heading); font-size: 0.68rem; color: var(--color-text-dim); letter-spacing: 0.06em; margin: 0; }
 .hint-text { font-family: var(--font-body); font-size: 0.75rem; color: var(--color-text-dim); margin: 0; }
 
-/* ── Main canvas container ── */
 .canvas-container {
   width: 100%;
   height: 65vh;
