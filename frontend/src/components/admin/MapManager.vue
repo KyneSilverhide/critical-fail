@@ -23,6 +23,8 @@ const fogEnabled = ref(false)
 const viewport = ref({ x: 0, y: 0, scale: 1 })
 const fogStrokes = ref([])  // { nx, ny, nr, cover? }
 const mapTokens = ref({})   // { [playerId]: { nx, ny } }
+const customTokenName = ref('')
+const pendingCustomToken = ref(false)
 
 const brushRadius = ref(DEFAULT_BRUSH_RADIUS)
 
@@ -54,7 +56,7 @@ const pendingTokenPlayerId = ref(null)
 async function loadImages() {
   if (!sessionStore.activeSession) return
   try {
-    const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionStore.activeSession.id}/images`, {
+    const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionStore.activeSession.id}/images?type=map`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
     })
     if (res.ok) images.value = await res.json()
@@ -70,6 +72,7 @@ function handleFileUpload(event) {
   const formData = new FormData()
   files.forEach(file => formData.append('files', file))
   formData.append('session_id', sessionStore.activeSession.id)
+  formData.append('type', 'map')
   const xhr = new XMLHttpRequest()
   xhr.upload.addEventListener('progress', (e) => {
     if (e.lengthComputable) uploadProgress.value = Math.round((e.loaded / e.total) * 100)
@@ -250,24 +253,27 @@ function drawToken(ctx, pid, tokenPos, layout) {
   const { offsetX, offsetY, totalScale } = layout
   const tx = offsetX + tokenPos.nx * mapImage.naturalWidth * totalScale
   const ty = offsetY + tokenPos.ny * mapImage.naturalHeight * totalScale
-  const player = sessionStore.players.find(p => String(p.id) === pid)
-  const name = player?.player_name || '?'
 
-  preloadAvatar(player || {})
+  // Support custom tokens (clé custom_*) et player tokens
+  const isCustom = pid.startsWith('custom_')
+  const player = isCustom ? null : sessionStore.players.find(p => String(p.id) === pid)
+  const name = isCustom ? (tokenPos.name || '?') : (player?.player_name || '?')
+
+  if (!isCustom) preloadAvatar(player || {})
 
   // Cercle de fond
   ctx.save()
   ctx.beginPath()
   ctx.arc(tx, ty, TOKEN_RADIUS, 0, Math.PI * 2)
-  ctx.fillStyle = '#1a1230'
+  ctx.fillStyle = isCustom ? '#1e2a1a' : '#1a1230'
   ctx.fill()
-  ctx.strokeStyle = '#c9a227'
+  ctx.strokeStyle = isCustom ? '#6aaa44' : '#c9a227'
   ctx.lineWidth = 2.5
   ctx.stroke()
   ctx.restore()
 
   // Avatar ou initiale
-  const cachedImg = avatarCache[pid]
+  const cachedImg = !isCustom && avatarCache[pid]
   if (cachedImg instanceof HTMLImageElement) {
     ctx.save()
     ctx.beginPath()
@@ -280,7 +286,7 @@ function drawToken(ctx, pid, tokenPos, layout) {
     ctx.font = `bold ${TOKEN_RADIUS}px sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle = '#c9a227'
+    ctx.fillStyle = isCustom ? '#6aaa44' : '#c9a227'
     ctx.fillText(name[0]?.toUpperCase() || '?', tx, ty)
     ctx.restore()
   }
@@ -396,6 +402,11 @@ function onPointerDown(event) {
   canvasEl.value?.setPointerCapture(event.pointerId)
 
   // Mode placement de jeton en attente
+  if (pendingCustomToken.value) {
+    const norm = canvasToNorm(pos.x, pos.y)
+    if (norm) placeCustomToken(norm.nx, norm.ny)
+    return
+  }
   if (pendingTokenPlayerId.value) {
     const norm = canvasToNorm(pos.x, pos.y)
     if (norm) placeToken(pendingTokenPlayerId.value, norm.nx, norm.ny)
@@ -424,7 +435,8 @@ function onPointerMove(event) {
   if (draggingTokenId) {
     const norm = canvasToNorm(pos.x, pos.y)
     if (norm) {
-      mapTokens.value = { ...mapTokens.value, [draggingTokenId]: { nx: norm.nx, ny: norm.ny } }
+      const existing = mapTokens.value[draggingTokenId]
+      mapTokens.value = { ...mapTokens.value, [draggingTokenId]: { ...existing, nx: norm.nx, ny: norm.ny } }
       if (tokenDragThrottleFrame) cancelAnimationFrame(tokenDragThrottleFrame)
       tokenDragThrottleFrame = requestAnimationFrame(render)
     }
@@ -451,7 +463,7 @@ function onPointerMove(event) {
 function onPointerUp(event) {
   if (draggingTokenId) {
     const tokenPos = mapTokens.value[draggingTokenId]
-    if (tokenPos) emitTokenMove(draggingTokenId, tokenPos.nx, tokenPos.ny)
+    if (tokenPos) emitTokenMove(draggingTokenId, tokenPos.nx, tokenPos.ny, tokenPos.name)
     draggingTokenId = null
     return
   }
@@ -504,9 +516,9 @@ function removeToken(playerId) {
   render()
 }
 
-function emitTokenMove(playerId, nx, ny) {
+function emitTokenMove(playerId, nx, ny, name = undefined) {
   const socket = getSocket()
-  socket.emit('map-token-move', { sessionId: sessionStore.activeSession.id, playerId, nx, ny })
+  socket.emit('map-token-move', { sessionId: sessionStore.activeSession.id, playerId, nx, ny, ...(name ? { name } : {}) })
 }
 
 function toggleTokenPlacement(playerId) {
@@ -515,6 +527,32 @@ function toggleTokenPlacement(playerId) {
   } else {
     pendingTokenPlayerId.value = String(playerId) === pendingTokenPlayerId.value ? null : String(playerId)
   }
+}
+
+function addCustomToken() {
+  const name = customTokenName.value.trim()
+  if (!name) return
+  pendingCustomToken.value = true
+  pendingTokenPlayerId.value = null
+}
+
+function placeCustomToken(nx, ny) {
+  const name = customTokenName.value.trim()
+  if (!name) return
+  const id = `custom_${Date.now()}`
+  mapTokens.value = { ...mapTokens.value, [id]: { nx, ny, name } }
+  emitTokenMove(id, nx, ny, name)
+  pendingCustomToken.value = false
+  render()
+}
+
+function removeCustomToken(id) {
+  const next = { ...mapTokens.value }
+  delete next[id]
+  mapTokens.value = next
+  const socket = getSocket()
+  socket.emit('map-token-remove', { sessionId: sessionStore.activeSession.id, playerId: id })
+  render()
 }
 
 // ── Socket actions ─────────────────────────────────────────────────────────
@@ -643,8 +681,9 @@ function handleFogReset() {
   render()
 }
 
-function handleMapTokenMoved({ playerId, nx, ny }) {
-  mapTokens.value = { ...mapTokens.value, [String(playerId)]: { nx, ny } }
+function handleMapTokenMoved({ playerId, nx, ny, name }) {
+  const existing = mapTokens.value[String(playerId)] || {}
+  mapTokens.value = { ...mapTokens.value, [String(playerId)]: { ...existing, nx, ny, ...(name !== undefined ? { name } : {}) } }
   render()
 }
 
@@ -666,6 +705,21 @@ function handleTvModeChanged(payload) {
     isMapActive.value = true
     if (payload.mapState) handleMapState(payload.mapState)
   }
+}
+
+async function deleteImage(img, event) {
+  event.stopPropagation()
+  if (!confirm(`Supprimer "${img.original_name || img.url}" ?`)) return
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionStore.activeSession.id}/images/${img.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    })
+    if (res.ok) {
+      if (selectedImageUrl.value === img.url) selectedImageUrl.value = null
+      await loadImages()
+    }
+  } catch (err) { console.error(err) }
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -726,13 +780,16 @@ watch(fogEnabled, () => render())
     </div>
     <div v-else class="gallery">
       <div
-        v-for="img in images"
-        :key="img.id"
-        class="gallery-item"
-        :class="{ selected: selectedImageUrl === img.url }"
-        @click="selectedImageUrl = img.url; loadMapImage(img.url)"
+          v-for="img in images"
+          :key="img.id"
+          class="gallery-item"
+          :class="{ selected: selectedImageUrl === img.url }"
+          @click="selectedImageUrl = img.url; loadMapImage(img.url)"
       >
-        <img :src="imageFullUrl(img.url)" :alt="img.url" class="gallery-thumb" />
+        <div class="thumb-wrapper">
+          <img :src="imageFullUrl(img.url)" :alt="img.original_name || img.url" class="gallery-thumb" />
+          <button class="delete-btn" @click="deleteImage(img, $event)" title="Supprimer">✕</button>
+        </div>
         <button class="show-btn" @click.stop="selectedImageUrl = img.url; loadMapImage(img.url); showMapOnTv()">
           🗺️ Carte TV
         </button>
@@ -788,6 +845,37 @@ watch(fogEnabled, () => render())
             <span v-if="mapTokens[String(player.id)]" class="chip-badge">✓</span>
             <span v-else-if="pendingTokenPlayerId === String(player.id)" class="chip-badge pending-badge">📍</span>
           </div>
+        </div>
+        <!-- Dans la section 🧙 Jetons de joueurs, après le token-tray -->
+
+        <div class="custom-token-form">
+          <input
+              v-model="customTokenName"
+              class="custom-token-input"
+              placeholder="Nom du jeton custom…"
+              maxlength="30"
+              @keydown.enter="addCustomToken"
+          />
+          <button
+              class="action-btn"
+              :class="{ active: pendingCustomToken }"
+              :disabled="!customTokenName.trim()"
+              @click="addCustomToken"
+          >
+            📍 Placer
+          </button>
+        </div>
+        <p v-if="pendingCustomToken" class="hint-text placement-hint">
+          📍 Cliquez sur la carte pour placer "{{ customTokenName }}"
+        </p>
+        <div v-if="Object.keys(mapTokens).some(k => k.startsWith('custom_'))" class="token-tray" style="margin-top:0.4rem">
+          <template v-for="(tokenPos, pid) in mapTokens" :key="pid">
+            <div v-if="String(pid).startsWith('custom_')" class="token-chip placed" @click="removeCustomToken(pid)"
+                 title="Cliquer pour retirer"><span class="chip-initial" style="color:#6aaa44">{{
+                tokenPos.name?.[0]?.toUpperCase() || '?'
+              }}</span> <span class="chip-name">{{ tokenPos.name }}</span> <span class="chip-badge"
+                                                                                 style="color:#6aaa44">✓</span></div>
+          </template>
         </div>
         <p v-if="pendingTokenPlayerId" class="hint-text placement-hint">
           📍 Cliquez sur la carte pour placer le jeton
@@ -896,14 +984,29 @@ watch(fogEnabled, () => render())
   color: var(--color-text-dim); pointer-events: none;
 }
 
-.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.75rem; }
-.gallery-item {
-  display: flex; flex-direction: column; gap: 0.35rem; align-items: center;
-  cursor: pointer; border: 2px solid transparent; border-radius: 8px;
-  padding: 0.2rem; transition: border-color 0.2s;
+.gallery {
+  columns: 2;
+  column-gap: 0.75rem;
 }
-.gallery-item.selected { border-color: var(--color-gold-bright); }
-.gallery-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; border: 1px solid var(--color-border); }
+.gallery-item {
+  break-inside: avoid;
+  margin-bottom: 0.75rem;
+}
+.gallery-thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: unset;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  display: block;
+}
+
+.gallery-item.selected {
+  border-color: var(--color-gold-bright);
+}
+
+
 .show-btn {
   width: 100%; padding: 0.3rem 0.25rem;
   background: var(--surface-gold-soft); border: 1px solid var(--color-gold-dark);
@@ -1006,5 +1109,47 @@ kbd {
   height: 100%;
   display: block;
   touch-action: none;
+}
+
+.thumb-wrapper {
+  position: relative;
+  width: 100%;
+}
+.delete-btn {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 20px; height: 20px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid var(--color-danger, #e74c3c);
+  border-radius: 50%;
+  color: var(--color-danger, #e74c3c);
+  font-size: 0.6rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+.thumb-wrapper:hover .delete-btn { opacity: 1; }
+
+.custom-token-form {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.custom-token-input {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  background: var(--surface-raised, #1e1e2e);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text, #fff);
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  outline: none;
+}
+.custom-token-input:focus {
+  border-color: var(--color-gold-dark);
 }
 </style>

@@ -732,7 +732,7 @@ function setupSocket(io) {
     })
 
     // ── Admin: move player token on map ─────────────────────────────────────
-    socket.on('map-token-move', async ({ sessionId, playerId, nx, ny }) => {
+    socket.on('map-token-move', async ({ sessionId, playerId, nx, ny, name }) => {
       if (!socket.admin) return
       try {
         const sessionRes = await pool.query(
@@ -742,13 +742,15 @@ function setupSocket(io) {
         if (!sessionRes.rows[0]) return
         let tokens = {}
         try { tokens = JSON.parse(sessionRes.rows[0].map_tokens || '{}') } catch {}
-        tokens[String(playerId)] = { nx: Number(nx) || 0, ny: Number(ny) || 0 }
+        const existing = tokens[String(playerId)] || {}
+        tokens[String(playerId)] = { ...existing, nx: Number(nx) || 0, ny: Number(ny) || 0, ...(name !== undefined ? { name } : {}) }
         await pool.query(
           'UPDATE sessions SET map_tokens = $1 WHERE id = $2 AND created_by = $3',
           [JSON.stringify(tokens), sessionId, socket.admin.id]
         )
-        io.to(`tv:${sessionId}`).emit('map-token-moved', { playerId, nx: tokens[String(playerId)].nx, ny: tokens[String(playerId)].ny })
-        io.to(`admin:${sessionId}`).emit('map-token-moved', { playerId, nx: tokens[String(playerId)].nx, ny: tokens[String(playerId)].ny })
+        const saved = tokens[String(playerId)]
+        io.to(`tv:${sessionId}`).emit('map-token-moved', { playerId, nx: saved.nx, ny: saved.ny, ...(saved.name ? { name: saved.name } : {}) })
+        io.to(`admin:${sessionId}`).emit('map-token-moved', { playerId, nx: saved.nx, ny: saved.ny, ...(saved.name ? { name: saved.name } : {}) })
       } catch (err) { console.error(err) }
     })
 

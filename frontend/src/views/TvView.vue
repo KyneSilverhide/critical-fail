@@ -437,8 +437,9 @@ onMounted(() => {
     renderMapFog()
   })
 
-  socket.on('map-token-moved', ({ playerId, nx, ny }) => {
-    mapTokens.value = { ...mapTokens.value, [String(playerId)]: { nx, ny } }
+  socket.on('map-token-moved', ({ playerId, nx, ny, name }) => {
+    const existing = mapTokens.value[String(playerId)] || {}
+    mapTokens.value = { ...mapTokens.value, [String(playerId)]: { ...existing, nx, ny, ...(name !== undefined ? { name } : {}) } }
   })
 
   socket.on('map-token-removed', ({ playerId }) => {
@@ -652,7 +653,7 @@ onUnmounted(() => {
             class="map-token-placed"
             :style="mapTokenStyles[pid]"
           >
-            <div class="token-circle">
+            <div class="token-circle" :style="String(pid).startsWith('custom_') ? { borderColor: '#6aaa44', boxShadow: '0 0 20px rgba(0,0,0,0.9), 0 0 12px rgba(106,170,68,0.5)' } : {}">
               <img
                 v-if="getPlayerById(pid)?.avatar_url"
                 :src="resolveMediaUrl(getPlayerById(pid).avatar_url)"
@@ -660,10 +661,11 @@ onUnmounted(() => {
                 class="token-avatar-img"
               />
               <span v-else class="token-initial-letter">
-                {{ getPlayerById(pid)?.player_name?.[0]?.toUpperCase() || '?' }}
+                {{ (getPlayerById(pid)?.player_name || mapTokens[pid]?.name || '?')[0]?.toUpperCase() }}
               </span>
             </div>
-            <span class="token-label">{{ getPlayerById(pid)?.player_name || '' }}</span>
+            <span class="token-label">  {{ getPlayerById(pid)?.player_name || mapTokens[pid]?.name || `[pid=${pid}]` }}</span>
+
           </div>
         </div>
       </div>
@@ -1412,13 +1414,13 @@ onUnmounted(() => {
   transform: translate(-50%, -50%);
 }
 .token-circle {
-  width: 56px; height: 56px;
+  width: 84px; height: 84px;
   border-radius: 50%;
-  border: 3px solid #c9a227;
+  border: 4px solid #c9a227;
   overflow: hidden;
   background: #1a1230;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 14px rgba(0,0,0,0.9), 0 0 8px rgba(201,162,39,0.5);
+  box-shadow: 0 0 20px rgba(0,0,0,0.9), 0 0 12px rgba(201,162,39,0.5);
   flex-shrink: 0;
 }
 .token-avatar-img {
@@ -1426,7 +1428,7 @@ onUnmounted(() => {
 }
 .token-initial-letter {
   font-family: var(--font-heading);
-  font-size: 1.6rem;
+  font-size: 2.4rem;
   color: #c9a227;
   font-weight: 700;
   line-height: 1;

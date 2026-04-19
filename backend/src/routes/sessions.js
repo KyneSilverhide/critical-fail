@@ -260,11 +260,45 @@ router.get('/:id/journal', authenticateToken, async (req, res) => {
 
 router.get('/:id/images', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT id, url, uploaded_at FROM session_images WHERE session_id = $1 ORDER BY uploaded_at DESC',
-      [req.params.id]
-    )
+    const { type } = req.query  // ?type=image ou ?type=map
+    const query = type
+        ? 'SELECT id, url, original_name, type, uploaded_at FROM session_images WHERE session_id = $1 AND type = $2 ORDER BY uploaded_at DESC'
+        : 'SELECT id, url, original_name, type, uploaded_at FROM session_images WHERE session_id = $1 ORDER BY uploaded_at DESC'
+    const params = type ? [req.params.id, type] : [req.params.id]
+    const result = await pool.query(query, params)
     res.json(result.rows)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Server error.' })
+  }
+})
+
+router.delete('/:id/images/:imageId', authenticateToken, async (req, res) => {
+  try {
+    // Vérifier que la session appartient à cet admin
+    const sessionCheck = await pool.query(
+        'SELECT id FROM sessions WHERE id = $1 AND created_by = $2',
+        [req.params.id, req.admin.id]
+    )
+    if (!sessionCheck.rows[0]) return res.status(404).json({ error: 'Session not found.' })
+
+    // Récupérer l'URL pour supprimer le fichier
+    const imgRes = await pool.query(
+        'SELECT url FROM session_images WHERE id = $1 AND session_id = $2',
+        [req.params.imageId, req.params.id]
+    )
+    if (!imgRes.rows[0]) return res.status(404).json({ error: 'Image not found.' })
+
+    // Supprimer en base
+    await pool.query('DELETE FROM session_images WHERE id = $1', [req.params.imageId])
+
+    // Supprimer le fichier sur le disque
+    const fs = require('fs').promises
+    const path = require('path')
+    const filePath = path.join(__dirname, '../../uploads', imgRes.rows[0].url.replace('/uploads/', ''))
+    await fs.unlink(filePath).catch(() => {}) // ignorer si déjà absent
+
+    res.json({ success: true })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Server error.' })

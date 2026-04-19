@@ -46,8 +46,14 @@ router.post('/', authenticateToken, upload.fields([
   const urls = uploadedFiles.map(file => `/uploads/${file.filename}`)
   if (req.body.session_id) {
     try {
-      for (const url of urls) {
-        await pool.query('INSERT INTO session_images (session_id, url) VALUES ($1, $2)', [req.body.session_id, url])
+      const type = req.body.type || 'image'
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const url = urls[i]
+        const originalName = uploadedFiles[i].originalname
+        await pool.query(
+            'INSERT INTO session_images (session_id, url, original_name, type) VALUES ($1, $2, $3, $4)',
+            [req.body.session_id, url, originalName, type]
+        )
       }
     } catch (err) { console.error(err) }
   }

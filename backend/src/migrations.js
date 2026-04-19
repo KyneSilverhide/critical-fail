@@ -155,6 +155,9 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS map_fog_enabled BOOLEAN DEFAULT FA
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS map_viewport TEXT;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS map_fog_strokes TEXT;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS map_tokens TEXT;
+
+ALTER TABLE session_images ADD COLUMN IF NOT EXISTS original_name VARCHAR(500);
+ALTER TABLE session_images ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'image';
 `
 
 async function runMigrations() {
